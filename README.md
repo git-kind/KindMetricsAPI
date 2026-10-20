@@ -3,6 +3,19 @@
 ## Arquitectura acordada
 Node.js + TypeScript + Fastify; **Controllers / Models (DTOs) / Services / Repositories**. Dos implementaciones físicas: `Repositories/StoredProcedures` para CRUD administrativo mediante `CALL`, y `Repositories/Queries` para SELECT del editor. Swagger en `/docs` y OpenAPI en `/docs/json`. ESLint, Prettier, TypeScript strict y pruebas.
 
+## Regla obligatoria de DTOs y contratos HTTP
+
+1. Todos los DTOs HTTP deben ubicarse en `src/Models/`.
+2. Los DTOs deben organizarse por módulo funcional, por ejemplo `src/Models/Auth`, `src/Models/Users` y `src/Models/Common`.
+3. No se permite declarar DTOs HTTP dentro de Controllers, Services ni Repositories.
+4. Cada endpoint debe declarar los contratos de entrada que realmente utilice.
+5. Cada endpoint JSON debe declarar su `ResponseDto` y documentarlo en Swagger.
+6. Los DTOs deben estar tipados estrictamente y validarse con Zod/Fastify cuando reciben entrada externa.
+7. Los `ApiResponse<T>` deben usarse como envelope para todas las respuestas JSON.
+8. Los DTOs no pueden exponer información sensible, secretos, hashes o tokens internos.
+9. Los DTOs no deben permitir asignaciones administrativas no autorizadas.
+10. Los nuevos endpoints deben cumplir esta regla desde su creación.
+
 ## Instalación
 1. `npm install`
 2. Crear `.env` desde `.env.example` y configurar credenciales y `JWT_SECRET` seguro.
