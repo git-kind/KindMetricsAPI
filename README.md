@@ -12,6 +12,95 @@ Node.js + TypeScript + Fastify; **Controllers / Models (DTOs) / Services / Repos
 6. `npm run dev`; Swagger: `http://localhost:3001/docs`.
 7. `npm run check` para lint, TypeScript y pruebas.
 
+## Estándar obligatorio de respuestas HTTP
+
+KindMetricsAPI usa un envelope uniforme para todas las respuestas JSON administradas por el backend.
+
+```ts
+export interface ApiError {
+  code: string;
+  message: string;
+  field?: string;
+}
+
+export interface ApiResponsePagination {
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface ApiResponseMeta {
+  requestId: string;
+  pagination?: ApiResponsePagination;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T | null;
+  errors: ApiError[];
+  meta: ApiResponseMeta;
+}
+```
+
+Reglas obligatorias:
+- `success` siempre es booleano.
+- `message` siempre existe y es string.
+- `data` devuelve el payload o `null` para errores.
+- `errors` siempre es un arreglo.
+- `meta.requestId` está presente en todas las respuestas gestionadas por Fastify.
+- `meta.pagination` solo aparece cuando corresponde.
+- Los códigos HTTP reflejan el resultado real; no se usa 200 para errores de negocio.
+- Los errores sensibles nunca se exponen al cliente: no stack traces, no SQL, no credenciales, no secretos.
+- Los nombres de propiedades son camelCase.
+- Cada error usa un código estable para frontend y traducción.
+
+Ejemplo exitoso:
+
+```json
+{
+  "success": true,
+  "message": "Inicio de sesión exitoso.",
+  "data": {
+    "accessToken": "TOKEN_JWT",
+    "tokenType": "Bearer",
+    "expiresIn": 900,
+    "user": {
+      "guid": "USER_GUID",
+      "email": "admin@kindtech.com",
+      "name": "Admin Erick"
+    }
+  },
+  "errors": [],
+  "meta": {
+    "requestId": "req-123"
+  }
+}
+```
+
+Ejemplo de error:
+
+```json
+{
+  "success": false,
+  "message": "Existen errores de validación.",
+  "data": null,
+  "errors": [
+    {
+      "code": "VALIDATION_ERROR",
+      "message": "El correo electrónico es obligatorio.",
+      "field": "email"
+    }
+  ],
+  "meta": {
+    "requestId": "req-124"
+  }
+}
+```
+
+El frontend que consuma Axios debe leer `response.data.data`, no `response.data.accessToken` directamente.
+
 ## Endpoints
 - `POST /api/v1/auth/login`, `GET /api/v1/auth/me`
 - CRUD genérico `GET/POST/PATCH/DELETE /api/v1/{companies,roles,catalogs,datasources,folders,dashboards,panels,settings}`. Para obtener por GUID: `GET /api/v1/:entity/:guid`.

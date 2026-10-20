@@ -9,6 +9,8 @@ import { authRoutes } from './Controllers/AuthController.js';
 import { entityRoutes } from './Controllers/EntityController.js';
 import { userRoutes } from './Controllers/UserController.js';
 import { queryRoutes } from './Controllers/QueryController.js';
+import { buildSuccessResponse } from './Helpers/ResponseHelper.js';
+import { handleApiError } from './Middleware/ErrorHandler.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: { redact: ['req.headers.authorization','req.headers.cookie','req.body.password'] } });
@@ -23,15 +25,8 @@ export async function buildApp() {
   await app.register(jwt, { secret });
   await app.register(swagger, { openapi: { info: { title: 'KindMetricsAPI', version: '0.1.0' }, components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, companyGuid: { type: 'apiKey', in: 'header', name: 'X-Company-Guid' } } } }, transform: jsonSchemaTransform });
   await app.register(swaggerUi, { routePrefix: '/docs' });
-  app.get('/health', async () => ({ status: 'ok' }));
+  app.get('/health', async (request) => buildSuccessResponse({ status: 'ok' }, request.id, 'Servicio saludable.'));
   await app.register(async (api) => { await api.register(authRoutes); await api.register(entityRoutes); await api.register(userRoutes); await api.register(queryRoutes); }, { prefix: '/api/v1' });
-  app.setErrorHandler((error, request, reply) => {
-    request.log.error({ err: error }, 'request failed');
-    const statusCode =
-      error instanceof Error && 'statusCode' in error && typeof error.statusCode === 'number'
-        ? error.statusCode
-        : 500;
-    reply.code(statusCode < 500 ? statusCode : 500).send({ error: 'REQUEST_FAILED', requestId: request.id });
-  });
+  app.setErrorHandler((error, request, reply) => handleApiError(error, request, reply));
   return app;
 }
