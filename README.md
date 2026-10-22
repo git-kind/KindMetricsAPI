@@ -118,6 +118,7 @@ El frontend que consuma Axios debe leer `response.data.data`, no `response.data.
 - `POST /api/v1/auth/login`, `GET /api/v1/auth/me`
 - CRUD genérico `GET/POST/PATCH/DELETE /api/v1/{companies,roles,catalogs,datasources,folders,dashboards,panels,settings}`. Para obtener por GUID: `GET /api/v1/:entity/:guid`.
 - `GET/POST/PATCH/DELETE /api/v1/users` (PATCH/DELETE con `/:guid`).
+- CRUD de gestión de usuarios `GET/POST /api/v1/users/management` y `GET/PUT/DELETE /api/v1/users/management/:id`. Admin puede crear, editar y desactivar; Admin y Visor pueden consultar. El DELETE bloquea `admin@kindtech.com` con HTTP 403.
 - `POST /api/v1/queries/execute` responde **501 intencionalmente** hasta incorporar parser SQL AST, control de datasources y gestor de secretos. El executor mysql2 se entrega como pieza de infraestructura, **no está conectado a SQL arbitrario del usuario**.
 
 ## Seguridad y multiempresa

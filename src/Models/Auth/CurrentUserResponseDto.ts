@@ -3,4 +3,5 @@ export interface CurrentUserResponseDto {
   email: string;
   name: string;
   platformAdmin: boolean;
+  perfil: 'Admin' | 'Visor';
 }

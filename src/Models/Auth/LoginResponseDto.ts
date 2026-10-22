@@ -3,6 +3,7 @@ export interface LoginUserDto {
   email: string;
   name: string;
   platformAdmin?: boolean;
+  perfil: 'Admin' | 'Visor';
 }
 
 export interface LoginResponseDto {
