@@ -6,6 +6,9 @@ import { userManagementRoutes } from '../Controllers/UserManagementController.js
 import { companyManagementRoutes } from '../Controllers/CompanyManagementController.js';
 import { userCompanyAccessRoutes } from '../Controllers/UserCompanyAccessController.js';
 import { queryRoutes } from '../Controllers/QueryController.js';
+import { dashboardRoutes } from './DashboardRoutes.js';
+import { dashboardTabsRoutes } from './DashboardTabsRoutes.js';
+import { dashboardPanelsRoutes } from './DashboardPanelsRoutes.js';
 
 const apiPrefix = '/api/v1';
 
@@ -30,4 +33,9 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
 
   // Query component
   await app.register(queryRoutes, { prefix: apiPrefix });
+
+  // Dashboard components
+  await app.register(dashboardRoutes, { prefix: apiPrefix });
+  await app.register(dashboardTabsRoutes, { prefix: apiPrefix });
+  await app.register(dashboardPanelsRoutes, { prefix: apiPrefix });
 }

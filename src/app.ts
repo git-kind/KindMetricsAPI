@@ -42,7 +42,7 @@ export async function buildApp() {
       callback(null, !origin || allowedOrigins.has(origin) || (isDevelopment && isLocalDevelopmentOrigin(origin)));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Guid'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Code'],
     credentials: true,
   });
   await app.register(cookie);
@@ -53,7 +53,7 @@ export async function buildApp() {
       components: {
         securitySchemes: {
           bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-          companyGuid: { type: 'apiKey', in: 'header', name: 'X-Company-Guid' },
+          companyCode: { type: 'apiKey', in: 'header', name: 'x-company-code' },
         },
       },
     },

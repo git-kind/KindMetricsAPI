@@ -33,14 +33,14 @@ describe('CORS configuration', () => {
         headers: {
           origin: 'http://localhost:5173',
           'access-control-request-method': 'PATCH',
-          'access-control-request-headers': 'authorization,x-company-guid',
+          'access-control-request-headers': 'authorization,x-company-code',
         },
       });
 
       expect(response.statusCode).toBe(204);
       expect(response.headers['access-control-allow-origin']).toBe('http://localhost:5173');
       expect(response.headers['access-control-allow-methods']).toContain('PATCH');
-      expect(response.headers['access-control-allow-headers']).toContain('X-Company-Guid');
+      expect(response.headers['access-control-allow-headers']).toContain('X-Company-Code');
     } finally {
       await app.close();
     }

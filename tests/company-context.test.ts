@@ -10,21 +10,11 @@ vi.mock('../src/Repositories/CompanyManagementRepository.js', () => ({
   resolveCompanyByCode: vi.fn(),
 }));
 
-import {
-  getCompanyManagementUserProfile,
-  resolveCompanyByCode,
-} from '../src/Repositories/CompanyManagementRepository.js';
+import { getCompanyManagementUserProfile, resolveCompanyByCode } from '../src/Repositories/CompanyManagementRepository.js';
 import { companyAccess } from '../src/Repositories/StoredProcedures/AuthRepository.js';
-import {
-  requireDashboardAdmin,
-  resolveCompany,
-  resolveDashboardReadAccess,
-} from '../src/Middleware/Security.js';
+import { requireDashboardAdmin, resolveCompany, resolveDashboardReadAccess } from '../src/Middleware/Security.js';
 
-function requestWith(
-  code: string | undefined,
-  platformAdmin = false,
-): FastifyRequest {
+function requestWith(code: string | undefined, platformAdmin = false): FastifyRequest {
   return {
     headers: code === undefined ? {} : { 'x-company-code': code },
     principal: { sub: 'user-guid', platformAdmin },
@@ -64,6 +54,7 @@ describe('Company context resolution', () => {
 
     expect(state.status).toBe(400);
     expect(resolveCompanyByCode).not.toHaveBeenCalled();
+    expect(companyAccess).not.toHaveBeenCalled();
   });
 
   it('does not resolve malformed codes from the administrative catalog', async () => {

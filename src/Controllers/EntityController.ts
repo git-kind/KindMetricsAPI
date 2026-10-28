@@ -12,7 +12,6 @@ const entityModules: { entity: EntityName; global: boolean }[] = [
   { entity: 'catalogs', global: false },
   { entity: 'datasources', global: false },
   { entity: 'folders', global: false },
-  { entity: 'dashboards', global: false },
   { entity: 'panels', global: false },
   { entity: 'settings', global: false },
 ];

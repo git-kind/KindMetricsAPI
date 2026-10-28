@@ -1,6 +1,7 @@
 # KindMetricsAPI — proyecto base (v0.1.0)
 
 ## Arquitectura acordada
+
 Node.js + TypeScript + Fastify; **Controllers / Models (DTOs) / Services / Repositories**. Dos implementaciones físicas: `Repositories/StoredProcedures` para CRUD administrativo mediante `CALL`, y `Repositories/Queries` para SELECT del editor. Swagger en `/docs` y OpenAPI en `/docs/json`. ESLint, Prettier, TypeScript strict y pruebas.
 
 ### Regla obligatoria: un bloque por componente de API
@@ -30,8 +31,9 @@ El patrón de registro vigente está en `src/Routes/ApiRoutes.ts`; los CRUD comp
 10. Los nuevos endpoints deben cumplir esta regla desde su creación.
 
 ## Instalación
-1. `npm install`
-2. Crear `.env` desde `.env.example` y configurar credenciales y `JWT_SECRET` seguro.
+
+1. `npm ci` para instalar las dependencias exactas del lockfile, incluida la dependencia de desarrollo `tsx`.
+2. Copiar `.env.example` a `.env.dev` y configurar los valores requeridos; establecer `JWT_SECRET` aleatorio de al menos 32 bytes y las credenciales de MySQL. No usar los valores `CHANGE_ME` del ejemplo.
 3. Ejecutar `mysql -u root -p < database/001_schema_and_procedures.sql` en una base de pruebas. **La migración está pensada para instalación nueva**, no aplicarla sobre una base existente sin revisión.
 4. Crear usuario MySQL para API y otorgar permisos de ejecución de los procedimientos necesarios (verificar política de privilegios del despliegue). Configurar `MYSQL_USER` y `MYSQL_PASSWORD`.
 5. En una instalación existente, después de que existan `users` y `companies`, ejecutar `mysql -u root -p kindmetrics < DataBaseScripts/user-company-access.sql`. El script crea la relación usuario–empresa (clave compuesta para permitir varias empresas por usuario) y recrea `sp_user_company_access_users`, `sp_user_company_access_companies` y `sp_user_company_access_replace`. Requiere MySQL 8.0 o posterior por el uso de `JSON_TABLE`; la asignación del conjunto completo de empresas se valida y actualiza en una transacción.
@@ -72,6 +74,7 @@ export interface ApiResponse<T> {
 ```
 
 Reglas obligatorias:
+
 - `success` siempre es booleano.
 - `message` siempre existe y es string.
 - `data` devuelve el payload o `null` para errores.
@@ -129,22 +132,24 @@ Ejemplo de error:
 El frontend que consuma Axios debe leer `response.data.data`, no `response.data.accessToken` directamente.
 
 ## Endpoints
+
 - `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`
 - CRUD genérico `GET/POST/PATCH/DELETE /api/v1/{companies,roles,catalogs,datasources,folders,dashboards,panels,settings}`. Para obtener por GUID: `GET /api/v1/:entity/:guid`.
 - `GET/POST/PATCH/DELETE /api/v1/users` (PATCH/DELETE con `/:guid`).
 - `POST /api/v1/queries/execute` responde **501 intencionalmente** hasta incorporar parser SQL AST, control de datasources y gestor de secretos. El executor mysql2 se entrega como pieza de infraestructura, **no está conectado a SQL arbitrario del usuario**.
 
 ## Seguridad y multiempresa
-- Header `Authorization: Bearer <JWT>` y `X-Company-Guid: <UUID>` en endpoints con contexto Company.
-- El GUID **no es credencial**. El servidor verifica usuario, Company activa, membresía y permiso específico.
+
+- Header `Authorization: Bearer <JWT>` y `x-company-code: <código>` en endpoints con contexto Company.
+- El código identifica la Company, pero no es credencial. El servidor verifica usuario, Company activa, membresía y permiso específico.
 - Companies requiere Platform Admin y no requiere header Company.
 - Las operaciones CRUD administrativas usan procedimientos parametrizados; los procedimientos de Company filtran por `company_id` resuelto en servidor.
 - Los permisos se deniegan por defecto. `user_permissions` soporta ALLOW/DENY; `role_permissions` concede por rol. No hay endpoints para asignación de roles/permisos todavía.
 
 ## Alcance y limitaciones importantes
+
 Este es un **andamiaje inicial**, no un producto de producción terminado. Los CRUD de entidades administrativas son básicos (name/description/config); falta modelado específico de cada dashboard, datasource, catálogo y permisos por recurso. No se implementaron refresh/logout, recuperación de contraseña, MFA, sesiones revocables, rate limiting, auditoría en cada escritura, políticas de delegación, herencia de folders, control de versiones ni cifrado de secretos. El endpoint Query está bloqueado por seguridad. Antes de producción: modelar permisos de lectura de dashboards, filtrado de campos de salida, DTOs específicos, protección anti-enumeración, paginación y controles de seguridad y transaccionalidad adicionales.
 
 **Atención:** el CRUD genérico devuelve columnas de tablas (no credenciales de usuario, pero sí JSON config); restringir DTOs de salida antes de desplegar. No almacenar secretos en `config`. Los ejemplos no sustituyen una revisión de seguridad.
-
 
 # mysql Accesos

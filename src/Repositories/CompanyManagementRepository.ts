@@ -23,6 +23,13 @@ type CompanyManagementUserRow = RowDataPacket & {
   status: string;
 };
 
+type CompanyCodeRow = RowDataPacket & {
+  id: number;
+  guid: string;
+  code: string;
+  status: string;
+};
+
 const selectCompanyColumns = `
   SELECT id, guid, name, code, razon_social, rfc, direccion, telefono, created_at, estado, status
   FROM companies
@@ -39,20 +46,12 @@ function toDto(row: CompanyRow): CompanyManagementDto {
     direccion: row.direccion,
     telefono: row.telefono,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : null,
-    estado:
-      row.estado?.toLowerCase() === 'inactivo' || row.status.toUpperCase() === 'INACTIVE'
-        ? 'inactivo'
-        : 'activo',
+    estado: row.estado?.toLowerCase() === 'inactivo' || row.status.toUpperCase() === 'INACTIVE' ? 'inactivo' : 'activo',
   };
 }
 
 function isDuplicateKey(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'ER_DUP_ENTRY'
-  );
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ER_DUP_ENTRY';
 }
 
 function throwIfDuplicateCompanyCode(error: unknown): never {
@@ -67,15 +66,11 @@ function throwIfDuplicateCompanyCode(error: unknown): never {
 }
 
 export async function listCompanies(): Promise<CompanyManagementDto[]> {
-  const [rows] = await pool.execute<CompanyRow[]>(
-    `${selectCompanyColumns} ORDER BY id`,
-  );
+  const [rows] = await pool.execute<CompanyRow[]>(`${selectCompanyColumns} ORDER BY id`);
   return rows.map(toDto);
 }
 
-export async function getCompanyManagementUserProfile(
-  guid: string,
-): Promise<'Admin' | 'Visor' | undefined> {
+export async function getCompanyManagementUserProfile(guid: string): Promise<'Admin' | 'Visor' | undefined> {
   const [rows] = await pool.execute<CompanyManagementUserRow[]>(
     `SELECT perfil
      FROM users
@@ -87,11 +82,19 @@ export async function getCompanyManagementUserProfile(
   return rows[0]?.perfil;
 }
 
-export async function getCompanyById(id: number): Promise<CompanyManagementDto | undefined> {
-  const [rows] = await pool.execute<CompanyRow[]>(
-    `${selectCompanyColumns} AND id = ? LIMIT 1`,
-    [id],
+export async function resolveCompanyByCode(code: string) {
+  const [rows] = await pool.execute<CompanyCodeRow[]>(
+    `SELECT id, guid, code, status
+     FROM companies
+     WHERE code = ?
+     LIMIT 1`,
+    [code],
   );
+  return rows[0];
+}
+
+export async function getCompanyById(id: number): Promise<CompanyManagementDto | undefined> {
+  const [rows] = await pool.execute<CompanyRow[]>(`${selectCompanyColumns} AND id = ? LIMIT 1`, [id]);
   return rows[0] ? toDto(rows[0]) : undefined;
 }
 
@@ -108,15 +111,7 @@ export async function createCompany(input: {
       `INSERT INTO companies
         (guid, name, code, razon_social, rfc, direccion, telefono, status, estado)
        VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 'activo')`,
-      [
-        randomUUID(),
-        input.name,
-        input.code,
-        input.razon_social,
-        input.rfc,
-        input.direccion,
-        input.telefono,
-      ],
+      [randomUUID(), input.name, input.code, input.razon_social, input.rfc, input.direccion, input.telefono],
     );
     const created = await getCompanyById(result.insertId);
     if (!created) {
@@ -177,10 +172,7 @@ export async function updateCompany(
 
   try {
     values.push(id);
-    await pool.execute<ResultSetHeader>(
-      `UPDATE companies SET ${assignments.join(', ')} WHERE id = ?`,
-      values,
-    );
+    await pool.execute<ResultSetHeader>(`UPDATE companies SET ${assignments.join(', ')} WHERE id = ?`, values);
     return getCompanyById(id);
   } catch (error) {
     return throwIfDuplicateCompanyCode(error);
