@@ -22,6 +22,21 @@ function normalizeErrorCollection(error: unknown): ApiError[] {
   return [createError('INTERNAL_ERROR', 'Ocurrió un error inesperado.')];
 }
 
+function isDatabaseConnectionError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('code' in error) || typeof error.code !== 'string') {
+    return false;
+  }
+
+  return [
+    'ECONNREFUSED',
+    'ETIMEDOUT',
+    'ENOTFOUND',
+    'EHOSTUNREACH',
+    'ECONNRESET',
+    'PROTOCOL_CONNECTION_LOST',
+  ].includes(error.code);
+}
+
 export function handleApiError(error: unknown, request: FastifyRequest, reply: FastifyReply): void {
   const requestId = request.id;
 
@@ -32,15 +47,19 @@ export function handleApiError(error: unknown, request: FastifyRequest, reply: F
     return;
   }
 
-  const statusCode =
-    error && typeof error === 'object' && 'statusCode' in error && typeof error.statusCode === 'number'
+  const statusCode = isDatabaseConnectionError(error)
+    ? 503
+    : error && typeof error === 'object' && 'statusCode' in error && typeof error.statusCode === 'number'
       ? error.statusCode
       : 500;
 
   let message = 'Ocurrió un error inesperado.';
   let errors: ApiError[] = [createError('INTERNAL_ERROR', message)];
 
-  if (error && typeof error === 'object') {
+  if (statusCode === 503) {
+    message = 'No se pudo conectar con la base de datos. Verifica que MySQL esté iniciado y que el host y puerto sean correctos.';
+    errors = [createError('DATABASE_UNAVAILABLE', message)];
+  } else if (error && typeof error === 'object') {
     if ('message' in error && typeof error.message === 'string') {
       message = error.message;
     }
@@ -63,9 +82,6 @@ export function handleApiError(error: unknown, request: FastifyRequest, reply: F
     } else if (statusCode === 429) {
       message = 'Demasiadas solicitudes.';
       errors = [createError('RATE_LIMIT_EXCEEDED', message)];
-    } else if (statusCode === 503) {
-      message = 'Base de datos no disponible.';
-      errors = [createError('DATABASE_UNAVAILABLE', message)];
     }
   }
 

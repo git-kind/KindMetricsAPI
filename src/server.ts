@@ -45,8 +45,7 @@ try {
 	console.info(`API: ${baseUrl}/api/v1`);
 } catch (error) {
 	const message = error instanceof Error ? error.message : String(error);
-	console.error(
-		`Database connection failed (${process.env.MYSQL_HOST ?? '127.0.0.1'}:${process.env.MYSQL_PORT ?? '3306'}/${process.env.MYSQL_DATABASE ?? 'kindmetrics'}): ${message}`,
+	console.warn(
+		`API is running, but the database connection failed (${process.env.MYSQL_HOST ?? '127.0.0.1'}:${process.env.MYSQL_PORT ?? '3306'}/${process.env.MYSQL_DATABASE ?? 'kindmetrics'}): ${message}. Database-backed routes will be unavailable until the database is reachable.`,
 	);
-	process.exit(1);
 }

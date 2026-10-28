@@ -3,6 +3,19 @@
 ## Arquitectura acordada
 Node.js + TypeScript + Fastify; **Controllers / Models (DTOs) / Services / Repositories**. Dos implementaciones físicas: `Repositories/StoredProcedures` para CRUD administrativo mediante `CALL`, y `Repositories/Queries` para SELECT del editor. Swagger en `/docs` y OpenAPI en `/docs/json`. ESLint, Prettier, TypeScript strict y pruebas.
 
+### Regla obligatoria: un bloque por componente de API
+
+Esta regla aplica a todo endpoint nuevo y a cualquier reorganización del API existente:
+
+1. **Un componente funcional equivale a un módulo de negocio** (por ejemplo, Auth, Users, Companies, Datasources o Dashboards). Cada componente debe tener un bloque de registro independiente en `src/Routes/ApiRoutes.ts`, bajo el prefijo `/api/v1`.
+2. Cada bloque registra únicamente el Controller de ese componente. No mezclar endpoints de distintos componentes en un Controller ni registrar varias funcionalidades dentro de un bloque anónimo compartido.
+3. Mantener el código del componente separado por responsabilidad: `Controllers/<Component>Controller.ts` (rutas), `Models/<Component>/` (DTOs y validación), `Services/<Component>Service.ts` (reglas de negocio), `Repositories/<Component>Repository.ts` (persistencia) y pruebas específicas del componente. Omitir una capa únicamente cuando el componente no la necesite.
+4. Cada Controller declara juntos los endpoints de su componente, con sus contratos, esquemas Swagger, autenticación, permisos y respuestas. No colocar DTOs HTTP, lógica de negocio ni consultas de persistencia en ese bloque de rutas.
+5. **Excepción acotada para CRUD idéntico:** los recursos pueden reutilizar un Controller genérico solo cuando compartan contrato y comportamiento. Aun así, cada recurso debe tener una entrada explícita de configuración con su alcance y autorización; si el contrato o las reglas divergen, se extrae a un componente/Controller propio.
+6. No cambiar rutas públicas, contratos HTTP, permisos ni comportamiento al ordenar el código. Agregar o actualizar pruebas por componente y ejecutar `npm run check`.
+
+El patrón de registro vigente está en `src/Routes/ApiRoutes.ts`; los CRUD compartidos están identificados individualmente en `src/Controllers/EntityController.ts`. Cualquier componente nuevo debe seguir la regla antes de considerarse completo.
+
 ## Regla obligatoria de DTOs y contratos HTTP
 
 1. Todos los DTOs HTTP deben ubicarse en `src/Models/`.
@@ -21,9 +34,10 @@ Node.js + TypeScript + Fastify; **Controllers / Models (DTOs) / Services / Repos
 2. Crear `.env` desde `.env.example` y configurar credenciales y `JWT_SECRET` seguro.
 3. Ejecutar `mysql -u root -p < database/001_schema_and_procedures.sql` en una base de pruebas. **La migración está pensada para instalación nueva**, no aplicarla sobre una base existente sin revisión.
 4. Crear usuario MySQL para API y otorgar permisos de ejecución de los procedimientos necesarios (verificar política de privilegios del despliegue). Configurar `MYSQL_USER` y `MYSQL_PASSWORD`.
-5. Para crear el primer administrador global: configurar `BOOTSTRAP_ADMIN_EMAIL` y `BOOTSTRAP_ADMIN_PASSWORD` en el entorno, ejecutar `npm run bootstrap:admin`, y eliminar esas variables inmediatamente después.
-6. `npm run dev`; Swagger: `http://localhost:3001/docs`.
-7. `npm run check` para lint, TypeScript y pruebas.
+5. En una instalación existente, después de que existan `users` y `companies`, ejecutar `mysql -u root -p kindmetrics < DataBaseScripts/user-company-access.sql`. El script crea la relación usuario–empresa (clave compuesta para permitir varias empresas por usuario) y recrea `sp_user_company_access_users`, `sp_user_company_access_companies` y `sp_user_company_access_replace`. Requiere MySQL 8.0 o posterior por el uso de `JSON_TABLE`; la asignación del conjunto completo de empresas se valida y actualiza en una transacción.
+6. Para crear el primer administrador global: configurar `BOOTSTRAP_ADMIN_EMAIL` y `BOOTSTRAP_ADMIN_PASSWORD` en el entorno, ejecutar `npm run bootstrap:admin`, y eliminar esas variables inmediatamente después.
+7. `npm run dev`; Swagger: `http://localhost:3001/docs`. En desarrollo, CORS admite frontends servidos desde `localhost`, `127.0.0.1` o `::1` en cualquier puerto; en QA/producción configura `CORS_ORIGIN` con los orígenes permitidos separados por comas. El servidor HTTP permanece disponible aunque MySQL no responda; las rutas que usan la base de datos devolverán `503 DATABASE_UNAVAILABLE` hasta restablecer la conexión. `/health` comprueba que la API responde, no la disponibilidad de MySQL.
+8. `npm run check` para lint, TypeScript y pruebas.
 
 ## Estándar obligatorio de respuestas HTTP
 
@@ -115,7 +129,7 @@ Ejemplo de error:
 El frontend que consuma Axios debe leer `response.data.data`, no `response.data.accessToken` directamente.
 
 ## Endpoints
-- `POST /api/v1/auth/login`, `GET /api/v1/auth/me`
+- `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`
 - CRUD genérico `GET/POST/PATCH/DELETE /api/v1/{companies,roles,catalogs,datasources,folders,dashboards,panels,settings}`. Para obtener por GUID: `GET /api/v1/:entity/:guid`.
 - `GET/POST/PATCH/DELETE /api/v1/users` (PATCH/DELETE con `/:guid`).
 - `POST /api/v1/queries/execute` responde **501 intencionalmente** hasta incorporar parser SQL AST, control de datasources y gestor de secretos. El executor mysql2 se entrega como pieza de infraestructura, **no está conectado a SQL arbitrario del usuario**.

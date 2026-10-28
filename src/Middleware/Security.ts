@@ -5,8 +5,27 @@ import { guid } from '../Models/Common.js';
 import { buildErrorResponse, createError } from '../Helpers/ResponseHelper.js';
 declare module 'fastify' { interface FastifyRequest { principal?: Principal; company?: CompanyContext } }
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
-  try { const token = await request.jwtVerify<Principal>(); request.principal = { sub: token.sub, platformAdmin: token.platformAdmin }; }
-  catch { return reply.code(401).send(buildErrorResponse('No autorizado.', [createError('UNAUTHORIZED', 'Credenciales no válidas o sesión expirada.')], request.id)); }
+  try {
+    const token = await request.jwtVerify<Principal & { tokenType?: string }>();
+    if (token.tokenType === 'refresh') {
+      return reply.code(401).send(
+        buildErrorResponse(
+          'No autorizado.',
+          [createError('UNAUTHORIZED', 'Credenciales no válidas o sesión expirada.')],
+          request.id,
+        ),
+      );
+    }
+    request.principal = { sub: token.sub, platformAdmin: token.platformAdmin };
+  } catch {
+    return reply.code(401).send(
+      buildErrorResponse(
+        'No autorizado.',
+        [createError('UNAUTHORIZED', 'Credenciales no válidas o sesión expirada.')],
+        request.id,
+      ),
+    );
+  }
 }
 export async function resolveCompany(request: FastifyRequest, reply: FastifyReply) {
   const value = request.headers['x-company-guid'];
