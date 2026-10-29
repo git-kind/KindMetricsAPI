@@ -2,14 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { createDashboardSchema, dashboardFiltersSchema, duplicateDashboardSchema, updateDashboardSchema } from '../src/Models/Dashboards/DashboardDto.js';
 import { createDashboardTabSchema, reorderDashboardTabsSchema } from '../src/Models/Dashboards/DashboardTabDto.js';
 import { createDashboardPanelSchema, saveDashboardPanelLayoutSchema } from '../src/Models/Dashboards/DashboardPanelDto.js';
+import { executeDashboardPanelSchema } from '../src/Models/Dashboards/DashboardPanelDto.js';
+import { createDashboardProcedureSchema, updateDashboardProcedureSchema } from '../src/Models/DashboardProcedures/DashboardProcedureDto.js';
 
 describe('Dashboard DTOs', () => {
   it('accepts only dashboard properties on create', () => {
     expect(createDashboardSchema.safeParse({ name: ' Overview ', tags: [' ops '] }).data).toEqual({
       name: 'Overview',
       tags: ['ops'],
+      refreshEnabled: false,
+      refreshIntervalSeconds: 30,
     });
     expect(createDashboardSchema.safeParse({ name: 'Overview', time_from: 'now-1h' }).success).toBe(false);
+  });
+
+  it('defaults and validates Dashboard refresh settings', () => {
+    expect(createDashboardSchema.parse({ name: 'Overview' })).toMatchObject({ refreshEnabled: false, refreshIntervalSeconds: 30 });
+    expect(createDashboardSchema.safeParse({ name: 'Overview', refreshIntervalSeconds: 9 }).success).toBe(false);
+    expect(createDashboardSchema.safeParse({ name: 'Overview', refreshIntervalSeconds: 0 }).success).toBe(false);
+    expect(updateDashboardSchema.safeParse({ expectedVersion: 1, refreshEnabled: true, refreshIntervalSeconds: 45 }).success).toBe(true);
   });
 
   it('distinguishes omitted values from explicit nulls on update', () => {
@@ -77,5 +88,58 @@ describe('Dashboard DTOs', () => {
         ],
       }).success,
     ).toBe(false);
+  });
+
+  it('requires an authorized procedure contract for data Panels and permits safe TEXT Panels', () => {
+    const textPanel = {
+      title: 'Notes',
+      panelType: 'TEXT',
+      gridX: 0,
+      gridY: 0,
+      gridW: 6,
+      gridH: 4,
+      visualizationConfig: { schemaVersion: 1, properties: { content: 'Operational notes' } },
+    };
+    expect(createDashboardPanelSchema.safeParse(textPanel).success).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...textPanel,
+        visualizationConfig: { schemaVersion: 1, properties: { content: '<script>alert(1)</script>' } },
+      }).success,
+    ).toBe(false);
+    expect(
+      createDashboardPanelSchema.safeParse({ ...textPanel, panelType: 'NUMBER', dashboardProcedureGuid: null }).success,
+    ).toBe(false);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...textPanel,
+        panelType: 'NUMBER',
+        dashboardProcedureGuid: 'b6f7a16e-fbd5-4cfb-976c-63b41852fa2a',
+        procedureParams: { schemaVersion: 1, parameters: [] },
+        visualizationConfig: { schemaVersion: 1, properties: { valueField: 'total_calls' } },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('validates panel execution filters and requires catalog approval before activation', () => {
+    expect(executeDashboardPanelSchema.parse({ filters: { dateFrom: '2026-10-01', serviceId: 'svc-1' } })).toMatchObject({
+      filters: { dateFrom: '2026-10-01', serviceId: 'svc-1' },
+    });
+    expect(executeDashboardPanelSchema.safeParse({ filters: { 'bad filter': 'x' } }).success).toBe(false);
+    expect(executeDashboardPanelSchema.safeParse({ filters: {}, procedureName: 'sp_dashboard_any' }).success).toBe(false);
+
+    const catalogEntry = {
+      procedureName: 'sp_dashboard_calls_summary',
+      parametersSchema: { schemaVersion: 1, parameters: [{ name: 'p_range', type: 'STRING', required: true }] },
+      resultSchema: { schemaVersion: 1, columns: [{ name: 'total_calls', type: 'INTEGER' }] },
+    };
+    expect(createDashboardProcedureSchema.safeParse(catalogEntry).success).toBe(true);
+    expect(createDashboardProcedureSchema.safeParse({ ...catalogEntry, procedureName: 'sp_user_admin' }).success).toBe(false);
+    expect(
+      updateDashboardProcedureSchema.safeParse({ status: 'ACTIVE', expectedVersion: 1 }).success,
+    ).toBe(false);
+    expect(
+      updateDashboardProcedureSchema.safeParse({ status: 'ACTIVE', approvalReference: 'SEC-42', expectedVersion: 1 }).success,
+    ).toBe(true);
   });
 });

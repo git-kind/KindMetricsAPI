@@ -3,6 +3,7 @@ import { dashboardPanelsController } from '../Controllers/DashboardPanelsControl
 import { authenticate, requireDashboardAdmin, resolveCompany, resolveDashboardReadAccess } from '../Middleware/Security.js';
 import {
   createDashboardPanelSchema,
+  dashboardPanelExecutionApiResponseSchema,
   dashboardPanelListQuerySchema,
   dashboardPanelGuidParamsSchema,
   dashboardPanelParamsSchema,
@@ -12,6 +13,7 @@ import {
   saveDashboardPanelLayoutSchema,
   setDashboardPanelStatusSchema,
   updateDashboardPanelSchema,
+  executeDashboardPanelSchema,
 } from '../Models/Dashboards/DashboardPanelDto.js';
 
 const read = [authenticate, resolveCompany, resolveDashboardReadAccess] as const;
@@ -52,6 +54,20 @@ export async function dashboardPanelsRoutes(app: FastifyInstance) {
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels/:panelGuid',
     { preHandler: [...read], schema: { tags, security, params: dashboardPanelGuidParamsSchema, response: { 200: dashboardPanelApiResponseSchema } } },
     (req, reply) => dashboardPanelsController.handle('get', req, reply),
+  );
+  app.post(
+    '/dashboards/:dashboardGuid/tabs/:tabGuid/panels/:panelGuid/execute',
+    {
+      preHandler: [...read],
+      schema: {
+        tags,
+        security,
+        params: dashboardPanelGuidParamsSchema,
+        body: executeDashboardPanelSchema,
+        response: { 200: dashboardPanelExecutionApiResponseSchema },
+      },
+    },
+    (req, reply) => dashboardPanelsController.handle('execute', req, reply),
   );
   app.post(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels',

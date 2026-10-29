@@ -135,6 +135,9 @@ El frontend que consuma Axios debe leer `response.data.data`, no `response.data.
 
 - `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`, `GET /api/v1/auth/me`
 - CRUD genérico `GET/POST/PATCH/DELETE /api/v1/{companies,roles,catalogs,datasources,folders,dashboards,panels,settings}`. Para obtener por GUID: `GET /api/v1/:entity/:guid`.
+- Dashboards, Tabs y Panels por Company: consultar y administrar `/api/v1/dashboards`, sus rutas `/tabs` y `/panels`, y guardar layout. Dashboards exponen `refreshEnabled` y `refreshIntervalSeconds` (mínimo 10; default 30); el API no agenda tareas de refresco.
+- `POST /api/v1/dashboards/:dashboardGuid/tabs/:tabGuid/panels/:panelGuid/execute` ejecuta solo el procedimiento activo referenciado por el Panel y devuelve `columns`, `rows`, `rowCount`, tiempo y fecha de ejecución. No acepta nombre de procedimiento, base de datos ni credenciales del cliente.
+- Catálogo Admin-only por Company: `GET/POST /api/v1/dashboard-procedures`, `GET/PATCH/DELETE /api/v1/dashboard-procedures/:guid`. Los registros nuevos quedan `PENDING`; activarlos exige revisión por otro Admin con referencia de aprobación.
 - `GET/POST/PATCH/DELETE /api/v1/users` (PATCH/DELETE con `/:guid`).
 - `POST /api/v1/queries/execute` responde **501 intencionalmente** hasta incorporar parser SQL AST, control de datasources y gestor de secretos. El executor mysql2 se entrega como pieza de infraestructura, **no está conectado a SQL arbitrario del usuario**.
 
@@ -145,6 +148,12 @@ El frontend que consuma Axios debe leer `response.data.data`, no `response.data.
 - Companies requiere Platform Admin y no requiere header Company.
 - Las operaciones CRUD administrativas usan procedimientos parametrizados; los procedimientos de Company filtran por `company_id` resuelto en servidor.
 - Los permisos se deniegan por defecto. `user_permissions` soporta ALLOW/DENY; `role_permissions` concede por rol. No hay endpoints para asignación de roles/permisos todavía.
+
+La ejecución de Panels resuelve Dashboard, Tab, Panel y procedimiento dentro de la Company ya autorizada. Los filtros aceptados deben estar mapeados a parámetros `DASHBOARD_FILTER`; valores `STATIC` y `SYSTEM` se resuelven desde la configuración o el contexto del backend. La API aplica timeout, hasta 8 ejecuciones concurrentes por Company y límites de 5,000 filas / 2 MB por respuesta. El pool de Company se reutiliza. La cuenta MySQL desplegada debe tener privilegios mínimos y ejecutar únicamente procedimientos de lectura auditados: el catálogo y el nombre del procedimiento no prueban por sí solos que el cuerpo sea de solo lectura.
+
+## Migraciones Dashboard
+
+Los scripts versionados `0006-dashboard-refresh-settings.sql` a `0009-dashboard-duplication-procedure-links.sql` amplían el esquema y los Stored Procedures de Company. Aplicarlos secuencialmente solo después de comprobar en el catálogo administrativo que la Company de destino apunta a la base prevista y que la conexión seleccionada corresponde a esa Company. Los scripts no incluyen nombres físicos de bases de datos y no se ejecutan automáticamente por la API. La validación funcional con MySQL requiere un ambiente autorizado; los tests locales no aplican estas migraciones.
 
 ## Alcance y limitaciones importantes
 

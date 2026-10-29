@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const guid = z.string().uuid();
 const expectedVersion = z.number().int().positive().max(4_294_967_295).safe();
-const panelTypes = ['LINE', 'BAR', 'PIE', 'GAUGE', 'STAT', 'TABLE', 'HEATMAP', 'TEXT'] as const;
+const panelTypes = ['NUMBER', 'TABLE', 'LINE', 'BAR', 'PIE', 'GAUGE', 'HEATMAP', 'MAP', 'TEXT', 'STAT'] as const;
 const secretKey = /password|passwd|secret|token|credential|private.?key|api.?key/i;
 
 function validConfig(value: unknown): boolean {
@@ -34,6 +34,134 @@ const configSchema = z
     message: 'La configuración excede los límites o contiene una propiedad sensible.',
   });
 
+const procedureParameterSchema = z
+  .object({
+    name: z.string().regex(/^p_[a-z][a-z0-9_]{0,62}$/),
+    type: z.enum(['STRING', 'NUMBER', 'INTEGER', 'BOOLEAN', 'DATE', 'DATETIME']),
+    source: z.enum(['DASHBOARD_FILTER', 'STATIC', 'SYSTEM']),
+    filter: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/).optional(),
+    value: z.union([z.string().max(2_000), z.number().finite(), z.boolean(), z.null()]).optional(),
+    systemKey: z.enum(['companyGuid', 'companyId', 'userGuid']).optional(),
+    required: z.boolean(),
+  })
+  .strict()
+  .superRefine((parameter, context) => {
+    if (parameter.source === 'DASHBOARD_FILTER' && !parameter.filter) {
+      context.addIssue({ code: 'custom', path: ['filter'], message: 'El parámetro requiere un filtro de Dashboard.' });
+    }
+    if (parameter.source === 'STATIC' && parameter.value === undefined) {
+      context.addIssue({ code: 'custom', path: ['value'], message: 'El parámetro STATIC requiere un valor fijo.' });
+    }
+    if (parameter.source === 'SYSTEM' && !parameter.systemKey) {
+      context.addIssue({ code: 'custom', path: ['systemKey'], message: 'El parámetro SYSTEM requiere una clave de contexto.' });
+    }
+    if (parameter.source !== 'DASHBOARD_FILTER' && parameter.filter !== undefined) {
+      context.addIssue({ code: 'custom', path: ['filter'], message: 'Solo DASHBOARD_FILTER admite mapeo de filtro.' });
+    }
+    if (parameter.source !== 'STATIC' && parameter.value !== undefined) {
+      context.addIssue({ code: 'custom', path: ['value'], message: 'Solo STATIC admite un valor configurado.' });
+    }
+    if (parameter.source !== 'SYSTEM' && parameter.systemKey !== undefined) {
+      context.addIssue({ code: 'custom', path: ['systemKey'], message: 'Solo SYSTEM admite claves de contexto.' });
+    }
+  });
+
+const procedureParamsSchema = z
+  .object({ schemaVersion: z.literal(1), parameters: z.array(procedureParameterSchema).max(64) })
+  .strict()
+  .refine((value) => new Set(value.parameters.map((parameter) => parameter.name)).size === value.parameters.length, {
+    message: 'Los nombres de parámetros del procedimiento deben ser únicos.',
+  });
+
+const fieldName = z.string().trim().min(1).max(128);
+const color = z.string().trim().min(1).max(40);
+const thresholdSchema = z.object({ value: z.number().finite(), color }).strict();
+const visualizationPropertiesSchemas = {
+  NUMBER: z.object({
+    valueField: fieldName,
+    title: z.string().max(200).optional(),
+    unit: z.string().max(40).optional(),
+    decimals: z.number().int().min(0).max(10).optional(),
+    prefix: z.string().max(32).optional(),
+    suffix: z.string().max(32).optional(),
+    format: z.enum(['number', 'currency', 'percent', 'duration']).optional(),
+    thresholds: z.array(thresholdSchema).max(32).optional(),
+    colors: z.array(color).max(32).optional(),
+  }).strict(),
+  STAT: z.object({ valueField: fieldName }).passthrough(),
+  TABLE: z.object({
+    columns: z.array(z.object({
+      field: fieldName,
+      header: z.string().max(200).optional(),
+      format: z.enum(['text', 'number', 'date', 'datetime', 'percent']).optional(),
+      align: z.enum(['left', 'center', 'right']).optional(),
+      visible: z.boolean().optional(),
+    }).strict()).min(1).max(256),
+    pagination: z.object({ enabled: z.boolean(), pageSize: z.number().int().min(1).max(500) }).strict().optional(),
+    sorting: z.object({ enabled: z.boolean(), fields: z.array(fieldName).max(256) }).strict().optional(),
+  }).strict(),
+  LINE: z.object({
+    xField: fieldName,
+    yFields: z.array(fieldName).min(1).max(32),
+    series: z.array(z.object({ field: fieldName, name: z.string().max(100).optional(), color: color.optional(), unit: z.string().max(40).optional() }).strict()).max(32).optional(),
+    legend: z.boolean().optional(),
+    xAxisFormat: z.string().max(40).optional(),
+    yAxisFormat: z.string().max(40).optional(),
+    labels: z.boolean().optional(),
+    colors: z.array(color).max(32).optional(),
+  }).strict(),
+  BAR: z.object({
+    xField: fieldName,
+    yFields: z.array(fieldName).min(1).max(32),
+    series: z.array(z.object({ field: fieldName, name: z.string().max(100).optional(), color: color.optional(), unit: z.string().max(40).optional() }).strict()).max(32).optional(),
+    legend: z.boolean().optional(),
+    xAxisFormat: z.string().max(40).optional(),
+    yAxisFormat: z.string().max(40).optional(),
+    labels: z.boolean().optional(),
+    colors: z.array(color).max(32).optional(),
+    stacked: z.boolean().optional(),
+  }).strict(),
+  PIE: z.object({
+    categoryField: fieldName,
+    valueField: fieldName,
+    legend: z.boolean().optional(),
+    labels: z.boolean().optional(),
+    showPercentages: z.boolean().optional(),
+    colors: z.array(color).max(64).optional(),
+  }).strict(),
+  GAUGE: z.object({
+    valueField: fieldName,
+    minimum: z.number().finite().optional(),
+    maximum: z.number().finite().optional(),
+    unit: z.string().max(40).optional(),
+    thresholds: z.array(thresholdSchema).max(32).optional(),
+  }).strict().refine((properties) => properties.minimum === undefined || properties.maximum === undefined || properties.minimum < properties.maximum),
+  HEATMAP: z.object({
+    xField: fieldName,
+    yField: fieldName,
+    valueField: fieldName,
+    colorScale: z.array(color).min(2).max(16).optional(),
+  }).strict(),
+  MAP: z.object({
+    latitudeField: fieldName,
+    longitudeField: fieldName,
+    labelField: fieldName.optional(),
+    valueField: fieldName.optional(),
+    marker: z.object({ color: color.optional(), size: z.number().int().min(1).max(64).optional(), cluster: z.boolean().optional() }).strict().optional(),
+  }).strict(),
+  TEXT: z.object({ content: z.string().max(20_000).refine((value) => !/[<>]/.test(value)), format: z.literal('plain').default('plain') }).strict(),
+} as const;
+
+export function validPanelVisualizationConfig(panelType: (typeof panelTypes)[number], config: z.infer<typeof configSchema> | null | undefined): boolean {
+  if (config == null) return false;
+  return visualizationPropertiesSchemas[panelType].safeParse(config.properties).success;
+}
+
+const procedureAssociationSchema = (panel: { panelType: (typeof panelTypes)[number]; dashboardProcedureGuid?: string | null; procedureParams?: unknown }) => {
+  if (panel.panelType === 'TEXT') return true;
+  return Boolean(panel.dashboardProcedureGuid) && procedureParamsSchema.safeParse(panel.procedureParams).success;
+};
+
 const gridSchema = z
   .object({
     gridX: z.number().int().min(0).max(12),
@@ -63,11 +191,45 @@ export const dashboardPanelListQuerySchema = z.object({
   panelType: z.enum(panelTypes).optional(),
 });
 
+export const executeDashboardPanelSchema = z
+  .object({
+    filters: z.record(
+      z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/),
+      z.union([z.string().max(2_000), z.number().finite(), z.boolean(), z.null()]),
+    ).default({}),
+  })
+  .strict()
+  .refine((request) => Object.keys(request.filters).length <= 64 && JSON.stringify(request.filters).length <= 32_768, {
+    message: 'La cantidad o tamaño de los filtros excede el límite permitido.',
+    path: ['filters'],
+  });
+
+export const dashboardPanelExecutionResponseSchema = z.object({
+  panelGuid: guid,
+  panelType: z.enum(panelTypes),
+  columns: z.array(z.object({ name: z.string(), type: z.string() }).strict()),
+  rows: z.array(z.record(z.string(), z.unknown())),
+  rowCount: z.number().int().nonnegative(),
+  executionTimeMs: z.number().int().nonnegative(),
+  executedAt: z.string().datetime(),
+});
+
+export const dashboardPanelExecutionApiResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: dashboardPanelExecutionResponseSchema.nullable(),
+  errors: z.array(z.object({ code: z.string(), message: z.string(), field: z.string().optional() })),
+  meta: z.object({ requestId: z.string() }),
+});
+
 export const createDashboardPanelSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
     description: z.string().max(20_000).nullable().optional(),
     panelType: z.enum(panelTypes),
+    dashboardProcedureGuid: guid.nullable().optional(),
+    procedureParams: procedureParamsSchema.optional(),
+    executionTimeoutSeconds: z.number().int().min(1).max(300).default(30),
     ...gridSchema.shape,
     minW: z.number().int().min(1).max(12).default(2),
     minH: z.number().int().min(1).max(100_000).default(2),
@@ -94,13 +256,24 @@ export const createDashboardPanelSchema = z
     {
       message: 'Las dimensiones del panel no respetan sus límites min/max.',
     },
-  );
+  )
+  .refine(procedureAssociationSchema, {
+    path: ['dashboardProcedureGuid'],
+    message: 'Los Paneles que ejecutan datos requieren un procedimiento autorizado y su definición de parámetros.',
+  })
+  .refine((panel) => validPanelVisualizationConfig(panel.panelType, panel.visualizationConfig), {
+    path: ['visualizationConfig'],
+    message: 'La configuración de visualización no corresponde al tipo de Panel.',
+  });
 
 export const updateDashboardPanelSchema = z
   .object({
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().max(20_000).nullable().optional(),
     panelType: z.enum(panelTypes).optional(),
+    dashboardProcedureGuid: guid.nullable().optional(),
+    procedureParams: procedureParamsSchema.nullable().optional(),
+    executionTimeoutSeconds: z.number().int().min(1).max(300).optional(),
     isCollapsed: z.boolean().optional(),
     isLocked: z.boolean().optional(),
     isVisible: z.boolean().optional(),
@@ -114,7 +287,24 @@ export const updateDashboardPanelSchema = z
   .strict()
   .refine((panel) => Object.keys(panel).some((key) => key !== 'expectedVersion'), {
     message: 'Debe proporcionar al menos una propiedad para actualizar.',
-  });
+  })
+  .refine(
+    (panel) =>
+      panel.panelType === undefined ||
+      panel.panelType === 'TEXT' ||
+      panel.dashboardProcedureGuid === undefined || (panel.dashboardProcedureGuid !== null && panel.procedureParams != null),
+    {
+      path: ['dashboardProcedureGuid'],
+      message: 'Al cambiar a un Panel con datos se requiere un procedimiento autorizado y su definición de parámetros.',
+    },
+  )
+  .refine(
+    (panel) => panel.panelType === undefined || panel.visualizationConfig === undefined || validPanelVisualizationConfig(panel.panelType, panel.visualizationConfig),
+    {
+      path: ['visualizationConfig'],
+      message: 'La configuración de visualización no corresponde al tipo de Panel.',
+    },
+  );
 
 export const duplicateDashboardPanelSchema = z.object({}).strict().default({});
 
@@ -174,6 +364,9 @@ export const dashboardPanelResponseSchema = z.object({
   title: z.string(),
   description: z.string().nullable(),
   panelType: z.enum(panelTypes),
+  dashboardProcedureGuid: guid.nullable(),
+  procedureParams: procedureParamsSchema.nullable(),
+  executionTimeoutSeconds: z.number().int().positive().max(300),
   status: z.enum(['ACTIVE', 'INACTIVE']),
   gridX: z.number().int().nonnegative().safe(),
   gridY: z.number().int().nonnegative().safe(),

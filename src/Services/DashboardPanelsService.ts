@@ -1,7 +1,13 @@
 import { AppError } from '../Errors/AppError.js';
 import type { CompanyContext } from '../Models/Common.js';
-import type { CreateDashboardPanelDto, MoveDashboardPanelDto, UpdateDashboardPanelDto } from '../Models/Dashboards/DashboardPanelDto.js';
+import {
+  validPanelVisualizationConfig,
+  type CreateDashboardPanelDto,
+  type MoveDashboardPanelDto,
+  type UpdateDashboardPanelDto,
+} from '../Models/Dashboards/DashboardPanelDto.js';
 import { DashboardPanelsRepository } from '../Repositories/Dashboards/DashboardPanelsRepository.js';
+import { DashboardProcedureRepository } from '../Repositories/DashboardProcedures/DashboardProcedureRepository.js';
 
 function persistenceError(error: unknown): never {
   const message = error && typeof error === 'object' && 'sqlMessage' in error && typeof error.sqlMessage === 'string' ? error.sqlMessage : '';
@@ -19,7 +25,38 @@ function persistenceError(error: unknown): never {
 }
 
 export class DashboardPanelsService {
-  constructor(private readonly repository = new DashboardPanelsRepository()) {}
+  constructor(
+    private readonly repository = new DashboardPanelsRepository(),
+    private readonly procedureRepository = new DashboardProcedureRepository(),
+  ) {}
+
+  private async validateProcedureMapping(company: CompanyContext, procedureGuid: string | null, procedureParams: unknown) {
+    if (!procedureGuid) return;
+    const procedure = await this.procedureRepository.get(company, procedureGuid, false);
+    if (!procedure || procedure.status !== 'ACTIVE') {
+      throw new AppError('El procedimiento asociado no existe o no está activo.', {
+        statusCode: 400,
+        code: 'DASHBOARD_PROCEDURE_NOT_ACTIVE',
+      });
+    }
+    const schema = procedure.parametersSchema as { parameters?: Array<{ name: string; type: string; required: boolean }> };
+    const mapping = procedureParams as { parameters?: Array<{ name: string; type: string; required: boolean }> } | null;
+    const configured = mapping?.parameters ?? [];
+    if (
+      !mapping ||
+      !Array.isArray(schema.parameters) ||
+      configured.length !== schema.parameters.length ||
+      schema.parameters.some((parameter) => {
+        const mapped = configured.find((entry) => entry.name === parameter.name);
+        return !mapped || mapped.type !== parameter.type || (parameter.required && !mapped.required);
+      })
+    ) {
+      throw new AppError('Los parámetros configurados no coinciden con el contrato del procedimiento autorizado.', {
+        statusCode: 400,
+        code: 'DASHBOARD_PANEL_PARAMETER_CONTRACT_MISMATCH',
+      });
+    }
+  }
 
   async list(company: CompanyContext, dashboard: string, tab: string, filters: { status?: 'ACTIVE' | 'INACTIVE'; panelType?: string }, canManage: boolean) {
     try {
@@ -40,6 +77,7 @@ export class DashboardPanelsService {
   }
   async create(company: CompanyContext, dashboard: string, tab: string, input: CreateDashboardPanelDto, actor: number) {
     try {
+      await this.validateProcedureMapping(company, input.dashboardProcedureGuid ?? null, input.procedureParams);
       const result = await this.repository.create(company, dashboard, tab, input, actor);
       if (!result) throw new AppError('No fue posible crear el Panel.', { code: 'DASHBOARD_PANEL_CREATE_FAILED' });
       return result;
@@ -50,6 +88,32 @@ export class DashboardPanelsService {
   }
   async update(company: CompanyContext, dashboard: string, tab: string, panel: string, input: UpdateDashboardPanelDto, actor: number) {
     try {
+      if (
+        input.dashboardProcedureGuid !== undefined ||
+        input.procedureParams !== undefined ||
+        input.panelType !== undefined ||
+        input.visualizationConfig !== undefined
+      ) {
+        const current = await this.repository.get(company, dashboard, tab, panel, true);
+        if (!current) throw new AppError('El Panel solicitado no existe.', { statusCode: 404, code: 'DASHBOARD_PANEL_NOT_FOUND' });
+        const procedureGuid = input.dashboardProcedureGuid !== undefined ? input.dashboardProcedureGuid : current.dashboardProcedureGuid;
+        const procedureParams = input.procedureParams !== undefined ? input.procedureParams : current.procedureParams;
+        const panelType = input.panelType ?? current.panelType;
+        const visualizationConfig = input.visualizationConfig !== undefined ? input.visualizationConfig : current.visualizationConfig;
+        if (!validPanelVisualizationConfig(panelType, visualizationConfig)) {
+          throw new AppError('La configuración de visualización no corresponde al tipo de Panel.', {
+            statusCode: 400,
+            code: 'INVALID_DASHBOARD_PANEL_VISUALIZATION',
+          });
+        }
+        if (panelType !== 'TEXT' && !procedureGuid) {
+          throw new AppError('Los Paneles que muestran datos requieren un procedimiento autorizado.', {
+            statusCode: 400,
+            code: 'DASHBOARD_PROCEDURE_REQUIRED',
+          });
+        }
+        await this.validateProcedureMapping(company, procedureGuid, procedureParams);
+      }
       const result = await this.repository.update(company, dashboard, tab, panel, input, actor);
       if (!result) throw new AppError('El Panel solicitado no existe.', { statusCode: 404, code: 'DASHBOARD_PANEL_NOT_FOUND' });
       return result;

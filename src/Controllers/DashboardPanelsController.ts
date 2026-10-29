@@ -3,6 +3,7 @@ import { actorId } from '../Repositories/StoredProcedures/ActorRepository.js';
 import { buildErrorResponse, buildSuccessResponse, createError } from '../Helpers/ResponseHelper.js';
 import {
   createDashboardPanelSchema,
+  executeDashboardPanelSchema,
   dashboardPanelListQuerySchema,
   dashboardPanelParamsSchema,
   moveDashboardPanelSchema,
@@ -11,9 +12,11 @@ import {
   updateDashboardPanelSchema,
 } from '../Models/Dashboards/DashboardPanelDto.js';
 import { DashboardPanelsService } from '../Services/DashboardPanelsService.js';
+import { DashboardPanelExecutionService } from '../Services/DashboardPanelExecutionService.js';
 
 const service = new DashboardPanelsService();
-type PanelOperation = 'list' | 'get' | 'create' | 'update' | 'duplicate' | 'move' | 'setStatus' | 'delete' | 'saveLayout';
+const executionService = new DashboardPanelExecutionService();
+type PanelOperation = 'list' | 'get' | 'create' | 'update' | 'duplicate' | 'move' | 'setStatus' | 'delete' | 'saveLayout' | 'execute';
 function issues(error: { issues: { message: string; path: PropertyKey[] }[] }) {
   return error.issues.map((issue) => createError('VALIDATION_ERROR', issue.message, issue.path.map(String).join('.')));
 }
@@ -40,6 +43,19 @@ export class DashboardPanelsController {
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
       const data = await service.saveLayout(company, dashboardGuid, tabGuid, input.data.panels, await actorId(request.principal!.sub));
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Layout guardado correctamente.'));
+    }
+    if (operation === 'execute') {
+      const input = executeDashboardPanelSchema.safeParse(request.body ?? {});
+      if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
+      let data;
+      try {
+        data = await executionService.execute(company, dashboardGuid, tabGuid, panelGuid!, input.data.filters, request.principal!.sub);
+      } catch (error) {
+        const errorCode = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'UNEXPECTED_ERROR';
+        request.log.error({ companyGuid: company.guid, dashboardGuid, tabGuid, panelGuid, errorCode }, 'Dashboard Panel execution failed');
+        throw error;
+      }
+      return reply.code(200).send(buildSuccessResponse(data, request.id, 'Panel ejecutado correctamente.'));
     }
     const actor = await actorId(request.principal!.sub);
     if (operation === 'create') {

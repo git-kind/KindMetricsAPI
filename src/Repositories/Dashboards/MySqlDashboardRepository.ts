@@ -12,6 +12,8 @@ type DashboardRow = RowDataPacket & {
   description: string | null;
   folder_id: number | string | null;
   tags: string | string[];
+  refresh_enabled: number | boolean;
+  refresh_interval_seconds: number | string;
   status: 'ACTIVE' | 'INACTIVE';
   version: number | string;
   created_at: Date | string;
@@ -68,6 +70,8 @@ function toDashboard(row: DashboardRow): DashboardResponseDto {
     description: row.description,
     folderId: row.folder_id === null ? null : positiveSafeInteger(row.folder_id, 'folder_id'),
     tags: parseTags(row.tags),
+    refreshEnabled: Boolean(row.refresh_enabled),
+    refreshIntervalSeconds: positiveSafeInteger(row.refresh_interval_seconds, 'refresh_interval_seconds'),
     status: row.status,
     version: positiveSafeInteger(row.version, 'version'),
     createdAt: formatDate(row.created_at)!,
@@ -146,6 +150,8 @@ export class MySqlDashboardRepository implements DashboardRepository {
         input.description ?? null,
         input.folderId ?? null,
         JSON.stringify(input.tags),
+        input.refreshEnabled ? 1 : 0,
+        input.refreshIntervalSeconds,
         actorId,
       ]);
       if (!rows[0]) {

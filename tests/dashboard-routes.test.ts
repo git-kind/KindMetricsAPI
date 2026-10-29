@@ -21,7 +21,10 @@ describe('Dashboard routes', () => {
       expect(openapi.paths['/api/v1/dashboards/{guid}/duplicate']).toBeDefined();
       expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs']).toBeDefined();
       expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs/{tabGuid}/panels']).toBeDefined();
+      expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs/{tabGuid}/panels/{panelGuid}/execute']).toBeDefined();
       expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs/{tabGuid}/panels/layout']).toBeDefined();
+      expect(openapi.paths['/api/v1/dashboard-procedures'].get).toBeDefined();
+      expect(openapi.paths['/api/v1/dashboard-procedures/{guid}'].patch).toBeDefined();
       expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs'].get.responses['200']).toBeDefined();
       expect(openapi.components.securitySchemes.companyCode.name).toBe('x-company-code');
 

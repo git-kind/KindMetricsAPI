@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ApiResponse } from '../ApiResponse.js';
 
 const dashboardStatusSchema = z.enum(['ACTIVE', 'INACTIVE']);
+const refreshIntervalSchema = z.number().int().min(10).max(86_400).safe();
 
 export const dashboardGuidParamsSchema = z.object({
   guid: z.string().uuid(),
@@ -13,6 +14,8 @@ export const createDashboardSchema = z
     description: z.string().max(20_000).nullable().optional(),
     folderId: z.number().int().positive().safe().nullable().optional(),
     tags: z.array(z.string().trim().min(1).max(100)).max(50).default([]),
+    refreshEnabled: z.boolean().default(false),
+    refreshIntervalSeconds: refreshIntervalSchema.default(30),
   })
   .strict();
 
@@ -22,6 +25,8 @@ export const updateDashboardSchema = z
     description: z.string().max(20_000).nullable().optional(),
     folderId: z.number().int().positive().safe().nullable().optional(),
     tags: z.array(z.string().trim().min(1).max(100)).max(50).optional(),
+    refreshEnabled: z.boolean().optional(),
+    refreshIntervalSeconds: refreshIntervalSchema.optional(),
     expectedVersion: z.number().int().positive().max(4_294_967_295).safe(),
   })
   .strict()
@@ -73,6 +78,8 @@ export const dashboardResponseSchema = z.object({
   description: z.string().nullable(),
   folderId: z.number().int().positive().safe().nullable(),
   tags: z.array(z.string()),
+  refreshEnabled: z.boolean(),
+  refreshIntervalSeconds: refreshIntervalSchema,
   status: dashboardStatusSchema,
   version: z.number().int().positive().safe(),
   createdAt: z.string().datetime(),
