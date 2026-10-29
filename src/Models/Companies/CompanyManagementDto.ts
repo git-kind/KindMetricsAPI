@@ -16,6 +16,9 @@ export const createCompanySchema = z
       .default(null),
     direccion: z.string().trim().max(255).nullable().default(null),
     telefono: z.string().trim().max(50).nullable().default(null),
+    database_name: z.string().trim().min(1).max(128),
+    database_user: z.string().trim().min(1).max(128),
+    database_password: z.string().min(1).max(512),
   })
   .strict();
 
@@ -33,6 +36,9 @@ export const updateCompanySchema = z
       .optional(),
     direccion: z.string().trim().max(255).nullable().optional(),
     telefono: z.string().trim().max(50).nullable().optional(),
+    database_name: z.string().trim().min(1).max(128).optional(),
+    database_user: z.string().trim().min(1).max(128).optional(),
+    database_password: z.string().min(1).max(512).optional(),
     estado: companyStatusSchema.optional(),
   })
   .strict()
@@ -44,6 +50,14 @@ export const companyIdParamsSchema = z.object({
   id: z.coerce.number().int().positive().safe(),
 });
 
+export const testCompanyConnectionSchema = z
+  .object({
+    database_name: z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9_$-]+$/),
+    database_user: z.string().trim().min(1).max(128),
+    database_password: z.string().min(1).max(512),
+  })
+  .strict();
+
 export interface CompanyManagementDto {
   id: number;
   guid: string;
@@ -53,6 +67,8 @@ export interface CompanyManagementDto {
   rfc: string | null;
   direccion: string | null;
   telefono: string | null;
+  database_name: string | null;
+  database_user: string | null;
   created_at: string | null;
   estado: 'activo' | 'inactivo';
 }
@@ -66,6 +82,8 @@ const companyResponseSchema = z.object({
   rfc: z.string().nullable(),
   direccion: z.string().nullable(),
   telefono: z.string().nullable(),
+  database_name: z.string().nullable().optional(),
+  database_user: z.string().nullable().optional(),
   created_at: z.string().datetime().nullable(),
   estado: companyStatusSchema,
 });
@@ -80,6 +98,14 @@ export const companyApiResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   data: z.union([companyResponseSchema, z.array(companyResponseSchema)]).nullable(),
+  errors: z.array(apiErrorSchema),
+  meta: z.object({ requestId: z.string() }),
+});
+
+export const companyConnectionTestResponseSchema = z.object({
+  success: z.boolean(),
+  message: z.string(),
+  data: z.object({ database_name: z.string(), connected: z.boolean() }).nullable(),
   errors: z.array(apiErrorSchema),
   meta: z.object({ requestId: z.string() }),
 });

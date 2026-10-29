@@ -37,9 +37,11 @@ El patrón de registro vigente está en `src/Routes/ApiRoutes.ts`; los CRUD comp
 3. Ejecutar `mysql -u root -p < database/001_schema_and_procedures.sql` en una base de pruebas. **La migración está pensada para instalación nueva**, no aplicarla sobre una base existente sin revisión.
 4. Crear usuario MySQL para API y otorgar permisos de ejecución de los procedimientos necesarios (verificar política de privilegios del despliegue). Configurar `MYSQL_USER` y `MYSQL_PASSWORD`.
 5. En una instalación existente, después de que existan `users` y `companies`, ejecutar `mysql -u root -p kindmetrics < DataBaseScripts/user-company-access.sql`. El script crea la relación usuario–empresa (clave compuesta para permitir varias empresas por usuario) y recrea `sp_user_company_access_users`, `sp_user_company_access_companies` y `sp_user_company_access_replace`. Requiere MySQL 8.0 o posterior por el uso de `JSON_TABLE`; la asignación del conjunto completo de empresas se valida y actualiza en una transacción.
-6. Para crear el primer administrador global: configurar `BOOTSTRAP_ADMIN_EMAIL` y `BOOTSTRAP_ADMIN_PASSWORD` en el entorno, ejecutar `npm run bootstrap:admin`, y eliminar esas variables inmediatamente después.
-7. `npm run dev`; Swagger: `http://localhost:3001/docs`. En desarrollo, CORS admite frontends servidos desde `localhost`, `127.0.0.1` o `::1` en cualquier puerto; en QA/producción configura `CORS_ORIGIN` con los orígenes permitidos separados por comas. El servidor HTTP permanece disponible aunque MySQL no responda; las rutas que usan la base de datos devolverán `503 DATABASE_UNAVAILABLE` hasta restablecer la conexión. `/health` comprueba que la API responde, no la disponibilidad de MySQL.
-8. `npm run check` para lint, TypeScript y pruebas.
+6. Ejecutar `mysql -u root -p kindmetrics < DataBaseScripts/company-management.sql` para agregar los campos de conexión de empresas a instalaciones existentes.
+7. Configurar `COMPANY_CREDENTIALS_ENCRYPTION_KEY` con exactamente 64 caracteres hexadecimales (32 bytes). Generar una clave nueva por entorno y no almacenarla en el repositorio. La API cifra `database_password` con AES-256-GCM y nunca devuelve la contraseña ni su valor cifrado.
+8. Para crear el primer administrador global: configurar `BOOTSTRAP_ADMIN_EMAIL` y `BOOTSTRAP_ADMIN_PASSWORD` en el entorno, ejecutar `npm run bootstrap:admin`, y eliminar esas variables inmediatamente después.
+9. `npm run dev`; Swagger: `http://localhost:3001/docs`. En desarrollo, CORS admite frontends servidos desde `localhost`, `127.0.0.1` o `::1` en cualquier puerto; en QA/producción configura `CORS_ORIGIN` con los orígenes permitidos separados por comas. El servidor HTTP permanece disponible aunque MySQL no responda; las rutas que usan la base de datos devolverán `503 DATABASE_UNAVAILABLE` hasta restablecer la conexión. `/health` comprueba que la API responde, no la disponibilidad de MySQL.
+10. `npm run check` para lint, TypeScript y pruebas.
 
 ## Estándar obligatorio de respuestas HTTP
 
@@ -156,8 +158,12 @@ La ejecución de Panels resuelve Dashboard, Tab, Panel y procedimiento dentro de
 Los scripts versionados `0006-dashboard-refresh-settings.sql` a `0009-dashboard-duplication-procedure-links.sql` amplían el esquema y los Stored Procedures de Company. Aplicarlos secuencialmente solo después de comprobar en el catálogo administrativo que la Company de destino apunta a la base prevista y que la conexión seleccionada corresponde a esa Company. Los scripts no incluyen nombres físicos de bases de datos y no se ejecutan automáticamente por la API. La validación funcional con MySQL requiere un ambiente autorizado; los tests locales no aplican estas migraciones.
 
 ## Alcance y limitaciones importantes
+<<<<<<< Updated upstream
 
 Este es un **andamiaje inicial**, no un producto de producción terminado. Los CRUD de entidades administrativas son básicos (name/description/config); falta modelado específico de cada dashboard, datasource, catálogo y permisos por recurso. No se implementaron refresh/logout, recuperación de contraseña, MFA, sesiones revocables, rate limiting, auditoría en cada escritura, políticas de delegación, herencia de folders, control de versiones ni cifrado de secretos. El endpoint Query está bloqueado por seguridad. Antes de producción: modelar permisos de lectura de dashboards, filtrado de campos de salida, DTOs específicos, protección anti-enumeración, paginación y controles de seguridad y transaccionalidad adicionales.
+=======
+Este es un **andamiaje inicial**, no un producto de producción terminado. Los CRUD de entidades administrativas son básicos (name/description/config); falta modelado específico de cada dashboard, datasource, catálogo y permisos por recurso. No se implementaron refresh/logout, recuperación de contraseña, MFA, sesiones revocables, rate limiting, auditoría en cada escritura, políticas de delegación, herencia de folders ni control de versiones. Las contraseñas de conexión de empresas sí se cifran con AES-256-GCM y no se exponen en DTOs. El endpoint Query está bloqueado por seguridad. Antes de producción: modelar permisos de lectura de dashboards, filtrado de campos de salida, DTOs específicos, protección anti-enumeración, paginación y controles de seguridad y transaccionalidad adicionales.
+>>>>>>> Stashed changes
 
 **Atención:** el CRUD genérico devuelve columnas de tablas (no credenciales de usuario, pero sí JSON config); restringir DTOs de salida antes de desplegar. No almacenar secretos en `config`. Los ejemplos no sustituyen una revisión de seguridad.
 

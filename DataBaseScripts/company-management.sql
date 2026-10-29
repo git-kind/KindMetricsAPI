@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS `companies` (
   `rfc` varchar(50) DEFAULT NULL,
   `direccion` varchar(255) DEFAULT NULL,
   `telefono` varchar(50) DEFAULT NULL,
+  `database_name` varchar(128) NOT NULL,
+  `database_user` varchar(128) NOT NULL,
+  `database_password` text NOT NULL,
   `estado` varchar(50) DEFAULT 'activo',
   PRIMARY KEY (`id`),
   UNIQUE KEY `guid` (`guid`),
@@ -25,3 +28,36 @@ CREATE TABLE IF NOT EXISTS `companies` (
 ) ENGINE=InnoDB
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_0900_ai_ci;
+
+SET @company_database_name_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'companies'
+     AND column_name = 'database_name') = 0,
+  'ALTER TABLE companies ADD COLUMN database_name varchar(128) NULL',
+  'SELECT 1'
+);
+PREPARE company_database_name_stmt FROM @company_database_name_sql;
+EXECUTE company_database_name_stmt;
+DEALLOCATE PREPARE company_database_name_stmt;
+
+SET @company_database_user_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'companies'
+     AND column_name = 'database_user') = 0,
+  'ALTER TABLE companies ADD COLUMN database_user varchar(128) NULL',
+  'SELECT 1'
+);
+PREPARE company_database_user_stmt FROM @company_database_user_sql;
+EXECUTE company_database_user_stmt;
+DEALLOCATE PREPARE company_database_user_stmt;
+
+SET @company_database_password_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'companies'
+     AND column_name = 'database_password') = 0,
+  'ALTER TABLE companies ADD COLUMN database_password text NULL',
+  'SELECT 1'
+);
+PREPARE company_database_password_stmt FROM @company_database_password_sql;
+EXECUTE company_database_password_stmt;
+DEALLOCATE PREPARE company_database_password_stmt;

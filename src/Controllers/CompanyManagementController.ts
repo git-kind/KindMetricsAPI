@@ -7,6 +7,8 @@ import {
   companyApiResponseSchema,
   companyIdParamsSchema,
   createCompanySchema,
+  companyConnectionTestResponseSchema,
+  testCompanyConnectionSchema,
   updateCompanySchema,
 } from '../Models/Companies/CompanyManagementDto.js';
 import {
@@ -16,6 +18,7 @@ import {
   getCompanyById,
   listCompanies,
   updateCompany,
+  testCompanyConnection,
 } from '../Repositories/CompanyManagementRepository.js';
 
 const responseSchemas = {
@@ -112,6 +115,35 @@ export async function companyManagementRoutes(app: FastifyInstance) {
       }
       return reply.code(200).send(
         buildSuccessResponse(company, request.id, 'Empresa obtenida correctamente.'),
+      );
+    },
+  );
+
+  app.post(
+    '/companies/management/test-connection',
+    {
+      preHandler: adminHooks,
+      schema: {
+        tags: ['Company management'],
+        response: {
+          200: companyConnectionTestResponseSchema,
+          400: companyConnectionTestResponseSchema,
+          401: companyConnectionTestResponseSchema,
+          403: companyConnectionTestResponseSchema,
+          422: companyConnectionTestResponseSchema,
+        },
+      },
+    },
+    async (request, reply) => {
+      const parsed = testCompanyConnectionSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.code(400).send(
+          buildErrorResponse('Existen errores de validación.', validationErrors(parsed.error), request.id),
+        );
+      }
+      const result = await testCompanyConnection(parsed.data);
+      return reply.code(200).send(
+        buildSuccessResponse(result, request.id, 'Conexión de empresa comprobada correctamente.'),
       );
     },
   );
