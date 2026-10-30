@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto';
+import { createCipheriv, randomBytes, randomUUID } from 'node:crypto';
+import mysql from 'mysql2/promise';
 import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { pool } from '../Config/DatabaseConfig.js';
 import { AppError } from '../Errors/AppError.js';
@@ -13,6 +14,8 @@ type CompanyRow = RowDataPacket & {
   rfc: string | null;
   direccion: string | null;
   telefono: string | null;
+  database_name: string | null;
+  database_user: string | null;
   created_at: Date | string | null;
   estado: 'activo' | 'inactivo' | null;
   status: string;
@@ -31,7 +34,8 @@ type CompanyCodeRow = RowDataPacket & {
 };
 
 const selectCompanyColumns = `
-  SELECT id, guid, name, code, razon_social, rfc, direccion, telefono, created_at, estado, status
+  SELECT id, guid, name, code, razon_social, rfc, direccion, telefono,
+         database_name, database_user, created_at, estado, status
   FROM companies
   WHERE 1 = 1`;
 
@@ -45,6 +49,8 @@ function toDto(row: CompanyRow): CompanyManagementDto {
     rfc: row.rfc,
     direccion: row.direccion,
     telefono: row.telefono,
+    database_name: row.database_name,
+    database_user: row.database_user,
     created_at: row.created_at ? new Date(row.created_at).toISOString() : null,
     estado: row.estado?.toLowerCase() === 'inactivo' || row.status.toUpperCase() === 'INACTIVE' ? 'inactivo' : 'activo',
   };
@@ -105,13 +111,28 @@ export async function createCompany(input: {
   rfc: string | null;
   direccion: string | null;
   telefono: string | null;
+  database_name: string;
+  database_user: string;
+  database_password: string;
 }): Promise<CompanyManagementDto> {
   try {
     const [result] = await pool.execute<ResultSetHeader>(
       `INSERT INTO companies
-        (guid, name, code, razon_social, rfc, direccion, telefono, status, estado)
-       VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 'activo')`,
-      [randomUUID(), input.name, input.code, input.razon_social, input.rfc, input.direccion, input.telefono],
+        (guid, name, code, razon_social, rfc, direccion, telefono,
+         database_name, database_user, database_password, status, estado)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ACTIVE', 'activo')`,
+      [
+        randomUUID(),
+        input.name,
+        input.code,
+        input.razon_social,
+        input.rfc,
+        input.direccion,
+        input.telefono,
+        input.database_name,
+        input.database_user,
+        encryptCompanyPassword(input.database_password),
+      ],
     );
     const created = await getCompanyById(result.insertId);
     if (!created) {
@@ -134,6 +155,9 @@ export async function updateCompany(
     rfc?: string | null;
     direccion?: string | null;
     telefono?: string | null;
+    database_name?: string;
+    database_user?: string;
+    database_password?: string;
     estado?: 'activo' | 'inactivo';
   },
 ): Promise<CompanyManagementDto | undefined> {
@@ -164,6 +188,18 @@ export async function updateCompany(
     assignments.push('telefono = ?');
     values.push(input.telefono);
   }
+  if (input.database_name !== undefined) {
+    assignments.push('database_name = ?');
+    values.push(input.database_name);
+  }
+  if (input.database_user !== undefined) {
+    assignments.push('database_user = ?');
+    values.push(input.database_user);
+  }
+  if (input.database_password !== undefined) {
+    assignments.push('database_password = ?');
+    values.push(encryptCompanyPassword(input.database_password));
+  }
   if (input.estado !== undefined) {
     const databaseStatus = input.estado === 'activo' ? 'ACTIVE' : 'INACTIVE';
     assignments.push('estado = ?', 'status = ?');
@@ -187,4 +223,98 @@ export async function deactivateCompany(id: number): Promise<CompanyManagementDt
     [id],
   );
   return getCompanyById(id);
+}
+
+function companyCredentialsKey(): Buffer {
+  const encoded = process.env.COMPANY_CREDENTIALS_ENCRYPTION_KEY;
+  if (!encoded || !/^[0-9a-f]{64}$/i.test(encoded)) {
+    throw new AppError(
+      'La clave de cifrado de credenciales de empresas no está configurada correctamente.',
+      { code: 'COMPANY_CREDENTIALS_KEY_MISSING' },
+    );
+  }
+  return Buffer.from(encoded, 'hex');
+}
+
+function encryptCompanyPassword(password: string): string {
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', companyCredentialsKey(), iv);
+  const ciphertext = Buffer.concat([cipher.update(password, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString('base64url')}:${tag.toString('base64url')}:${ciphertext.toString('base64url')}`;
+}
+
+export async function testCompanyConnection(input: {
+  database_name: string;
+  database_user: string;
+  database_password: string;
+}): Promise<{ database_name: string; connected: true }> {
+  const identifier = `\`${input.database_name.replace(/`/g, '``')}\``;
+  const userIdentifier = `\`${input.database_user.replace(/`/g, '``')}\``;
+  const escapedPassword = mysql.escape(input.database_password);
+  let connection: mysql.Connection | undefined;
+  try {
+    const adminConnection = await mysql.createConnection({
+      host: process.env.MYSQL_HOST ?? '127.0.0.1',
+      port: Number(process.env.MYSQL_PORT ?? 3306),
+      user: process.env.MYSQL_USER,
+      password: process.env.MYSQL_PASSWORD,
+      connectTimeout: 5000,
+    });
+    try {
+      await adminConnection.query(`CREATE DATABASE IF NOT EXISTS ${identifier}`);
+      await adminConnection.query(
+        `CREATE USER IF NOT EXISTS ${userIdentifier}@'127.0.0.1' IDENTIFIED BY ${escapedPassword}`,
+      );
+      await adminConnection.query(
+        `ALTER USER ${userIdentifier}@'127.0.0.1' IDENTIFIED BY ${escapedPassword}`,
+      );
+      await adminConnection.query(
+        `GRANT ALL PRIVILEGES ON ${identifier}.* TO ${userIdentifier}@'127.0.0.1'`,
+      );
+      await adminConnection.query(
+        `CREATE USER IF NOT EXISTS ${userIdentifier}@'localhost' IDENTIFIED BY ${escapedPassword}`,
+      );
+      await adminConnection.query(
+        `ALTER USER ${userIdentifier}@'localhost' IDENTIFIED BY ${escapedPassword}`,
+      );
+      await adminConnection.query(
+        `GRANT ALL PRIVILEGES ON ${identifier}.* TO ${userIdentifier}@'localhost'`,
+      );
+      await adminConnection.query(
+        `CREATE USER IF NOT EXISTS ${userIdentifier}@'%' IDENTIFIED BY ${escapedPassword}`,
+      );
+      await adminConnection.query(
+        `ALTER USER ${userIdentifier}@'%' IDENTIFIED BY ${escapedPassword}`,
+      );
+      await adminConnection.query(
+        `GRANT ALL PRIVILEGES ON ${identifier}.* TO ${userIdentifier}@'%'`,
+      );
+      await adminConnection.query('FLUSH PRIVILEGES');
+    } finally {
+      await adminConnection.end();
+    }
+
+    connection = await mysql.createConnection({
+      host: process.env.MYSQL_HOST ?? '127.0.0.1',
+      port: Number(process.env.MYSQL_PORT ?? 3306),
+      user: input.database_user,
+      password: input.database_password,
+      database: input.database_name,
+      connectTimeout: 5000,
+    });
+    await connection.query('SELECT 1');
+    return { database_name: input.database_name, connected: true };
+  } catch (error) {
+    const databaseError =
+      error && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+        ? error.code
+        : 'UNKNOWN_DATABASE_ERROR';
+    throw new AppError(`No se pudo crear o probar la conexión de la empresa (${databaseError}).`, {
+      statusCode: 422,
+      code: 'COMPANY_CONNECTION_TEST_FAILED',
+    });
+  } finally {
+    await connection?.end();
+  }
 }

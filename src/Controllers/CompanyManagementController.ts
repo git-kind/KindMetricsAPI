@@ -7,7 +7,8 @@ import {
   companyApiResponseSchema,
   companyIdParamsSchema,
   createCompanySchema,
-  companyConnectionTestResponseSchema,
+  companyConnectionTestApiResponseSchema,
+  companyConnectionTestErrorApiResponseSchema,
   testCompanyConnectionSchema,
   updateCompanySchema,
 } from '../Models/Companies/CompanyManagementDto.js';
@@ -126,11 +127,11 @@ export async function companyManagementRoutes(app: FastifyInstance) {
       schema: {
         tags: ['Company management'],
         response: {
-          200: companyConnectionTestResponseSchema,
-          400: companyConnectionTestResponseSchema,
-          401: companyConnectionTestResponseSchema,
-          403: companyConnectionTestResponseSchema,
-          422: companyConnectionTestResponseSchema,
+          200: companyConnectionTestApiResponseSchema,
+          400: companyConnectionTestErrorApiResponseSchema,
+          401: companyConnectionTestErrorApiResponseSchema,
+          403: companyConnectionTestErrorApiResponseSchema,
+          422: companyConnectionTestErrorApiResponseSchema,
         },
       },
     },

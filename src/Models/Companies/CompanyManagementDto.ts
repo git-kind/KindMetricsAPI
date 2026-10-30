@@ -53,7 +53,7 @@ export const companyIdParamsSchema = z.object({
 export const testCompanyConnectionSchema = z
   .object({
     database_name: z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9_$-]+$/),
-    database_user: z.string().trim().min(1).max(128),
+    database_user: z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9_$-]+$/),
     database_password: z.string().min(1).max(512),
   })
   .strict();
@@ -109,6 +109,21 @@ export const companyConnectionTestResponseSchema = z.object({
   errors: z.array(apiErrorSchema),
   meta: z.object({ requestId: z.string() }),
 });
+
+export const companyConnectionTestErrorResponseSchema = z.object({
+  success: z.literal(false),
+  message: z.string(),
+  data: z.null(),
+  errors: z.array(apiErrorSchema),
+  meta: z.object({ requestId: z.string() }),
+});
+
+export const companyConnectionTestApiResponseSchema = z.union([
+  companyConnectionTestResponseSchema,
+  companyConnectionTestErrorResponseSchema,
+]);
+
+export const companyConnectionTestErrorApiResponseSchema = z.any();
 
 export const companyManagementAccessResponseSchema = z.object({
   success: z.boolean(),
