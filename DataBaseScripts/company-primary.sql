@@ -6,9 +6,11 @@ INSERT INTO companies (
     timezone,
     locale,
     is_primary,
-    status
+    status,
+    razon_social,
+    estado
 )
-VALUES (
+SELECT
     UUID(),
     'Kind Technologies',
     'KIND',
@@ -16,5 +18,11 @@ VALUES (
     'America/Mexico_City',
     'es',
     1,
-    'ACTIVE'
+    'ACTIVE',
+    'Kind Technologies',
+    'activo'
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM companies
+    WHERE code = 'KIND'
 );

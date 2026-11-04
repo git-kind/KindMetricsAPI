@@ -1,15 +1,8 @@
-import type { RowDataPacket } from 'mysql2';
-import { pool as administrativePool } from '../Config/DatabaseConfig.js';
 import { AppError } from '../Errors/AppError.js';
 import type { CompanyContext } from '../Models/Common.js';
+import { getCompanyConnectionCredentials } from '../Repositories/CompanyConnectionRepository.js';
 import { companyCredentialService } from './CompanyCredentialService.js';
 import { companyConnectionManager, type CompanyPoolConfig } from './CompanyConnectionManager.js';
-
-type CompanyConnectionRow = RowDataPacket & {
-  db_name: string | null;
-  db_username: string | null;
-  db_password_encrypted: Buffer | null;
-};
 
 function positiveInteger(value: string | undefined, defaultValue: number): number {
   const parsed = Number(value ?? defaultValue);
@@ -24,17 +17,16 @@ function positiveInteger(value: string | undefined, defaultValue: number): numbe
 
 export class CompanyConnectionService {
   async getPool(company: CompanyContext) {
-    let rows: CompanyConnectionRow[];
+    let credentials: Awaited<ReturnType<typeof getCompanyConnectionCredentials>>;
     try {
-      [rows] = await administrativePool.execute<CompanyConnectionRow[]>(
-        `SELECT db_name, db_username, db_password_encrypted
-         FROM companies
-         WHERE id = ? AND guid = ? AND UPPER(TRIM(status)) = 'ACTIVE'
-         LIMIT 1`,
-        [company.id, company.guid],
-      );
+      credentials = await getCompanyConnectionCredentials(company);
     } catch (error) {
-      if (error && typeof error === 'object' && 'code' in error && error.code === 'ER_BAD_FIELD_ERROR') {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'ER_BAD_FIELD_ERROR'
+      ) {
         throw new AppError('El catalogo administrativo requiere la migracion de conexiones de Company.', {
           statusCode: 503,
           code: 'COMPANY_DATABASE_CATALOG_MIGRATION_REQUIRED',
@@ -42,7 +34,6 @@ export class CompanyConnectionService {
       }
       throw error;
     }
-    const credentials = rows[0];
     if (!credentials?.db_name || !credentials.db_username || !credentials.db_password_encrypted) {
       throw new AppError('La compañía no tiene configuradas credenciales de base de datos.', {
         statusCode: 503,

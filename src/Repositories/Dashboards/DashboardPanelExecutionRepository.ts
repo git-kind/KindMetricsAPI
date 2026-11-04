@@ -2,6 +2,7 @@ import type { RowDataPacket } from 'mysql2';
 import type { CompanyContext } from '../../Models/Common.js';
 import { CompanyDatabaseRepository, type ProcedureParameter } from '../CompanyDatabaseRepository.js';
 import { companyConnectionService } from '../../Services/CompanyConnectionService.js';
+import { executeReadOnlyProcedure } from '../../Database/SqlExecutor.js';
 
 export type DashboardPanelExecutionConfig = {
   panelGuid: string;
@@ -52,35 +53,6 @@ export class DashboardPanelExecutionRepository {
   async execute(company: CompanyContext, procedureName: string, parameters: readonly ProcedureParameter[], timeoutSeconds: number) {
     if (!/^sp_dashboard_[a-z0-9_]{1,112}$/.test(procedureName)) throw new Error('Invalid authorized procedure name');
     const pool = await companyConnectionService.getPool(company);
-    const connection = await pool.getConnection();
-    let reusable = true;
-    let transactionStarted = false;
-    try {
-      await connection.query('SET TRANSACTION READ ONLY');
-      await connection.beginTransaction();
-      transactionStarted = true;
-      const placeholders = parameters.map(() => '?').join(',');
-      const [result] = await connection.query<RowDataPacket[][]>(
-        { sql: `CALL ${procedureName}(${placeholders})`, timeout: timeoutSeconds * 1000 },
-        [...parameters],
-      );
-      return result.filter(Array.isArray) as RowDataPacket[][];
-    } catch (error) {
-      reusable = false;
-      connection.destroy();
-      throw error;
-    } finally {
-      if (reusable) {
-        if (transactionStarted) {
-          try {
-            await connection.rollback();
-          } catch {
-            reusable = false;
-            connection.destroy();
-          }
-        }
-        if (reusable) connection.release();
-      }
-    }
+    return executeReadOnlyProcedure(pool, procedureName, parameters, timeoutSeconds);
   }
 }

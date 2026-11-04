@@ -28,6 +28,7 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
 }
 
 export async function resolveCompany(request: FastifyRequest, reply: FastifyReply) {
+  request.company = undefined;
   const code = request.headers['x-company-code'];
   if (typeof code !== 'string' || !companyCodePattern.test(code)) {
     return reply

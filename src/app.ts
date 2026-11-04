@@ -19,7 +19,16 @@ function isLocalDevelopmentOrigin(origin: string): boolean {
 }
 
 export async function buildApp() {
-  const app = Fastify({ logger: { redact: ['req.headers.authorization', 'req.headers.cookie', 'req.body.password'] } });
+  const app = Fastify({
+    logger: {
+      redact: [
+        'req.headers.authorization',
+        'req.headers.cookie',
+        'req.body.password',
+        'req.body.database_password',
+      ],
+    },
+  });
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   const secret = process.env.JWT_SECRET;
@@ -61,7 +70,7 @@ export async function buildApp() {
   });
   await app.register(swaggerUi, { routePrefix: '/docs' });
   app.get('/health', async (request) => buildSuccessResponse({ status: 'ok' }, request.id, 'Servicio saludable.'));
-  await registerApiRoutes(app);
   app.setErrorHandler((error, request, reply) => handleApiError(error, request, reply));
+  await registerApiRoutes(app);
   return app;
 }

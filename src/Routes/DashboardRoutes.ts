@@ -27,7 +27,10 @@ export async function dashboardRoutes(app: FastifyInstance) {
         tags,
         security,
         querystring: dashboardFiltersSchema,
-        response: { 200: dashboardListApiResponseSchema },
+        response: {
+          200: dashboardListApiResponseSchema,
+          503: dashboardListApiResponseSchema,
+        },
       },
     },
     (request, reply) => dashboardsController.list(request, reply),

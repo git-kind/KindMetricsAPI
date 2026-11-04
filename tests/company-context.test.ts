@@ -111,6 +111,35 @@ describe('Company context resolution', () => {
     });
   });
 
+  it('rejects switching the company header to a company without membership', async () => {
+    const request = requestWith('AUTHORIZED');
+    const { reply, state } = replyDouble();
+    vi.mocked(resolveCompanyByCode)
+      .mockResolvedValueOnce({
+        id: 8,
+        guid: '123e4567-e89b-12d3-a456-426614174008',
+        code: 'AUTHORIZED',
+        status: 'ACTIVE',
+      })
+      .mockResolvedValueOnce({
+        id: 9,
+        guid: '123e4567-e89b-12d3-a456-426614174009',
+        code: 'OTHER',
+        status: 'ACTIVE',
+      });
+    vi.mocked(companyAccess).mockResolvedValueOnce({ id: 8 });
+
+    await resolveCompany(request, reply);
+    expect(request.company?.code).toBe('AUTHORIZED');
+
+    request.headers['x-company-code'] = 'OTHER';
+    vi.mocked(companyAccess).mockResolvedValueOnce(undefined);
+    await resolveCompany(request, reply);
+
+    expect(state.status).toBe(403);
+    expect(request.company).toBeUndefined();
+  });
+
   it('allows a platform administrator to resolve a company without a membership row', async () => {
     const request = requestWith('ACME', true);
     const { reply } = replyDouble();

@@ -1,6 +1,4 @@
--- Esquema de referencia para la tabla companies.
--- No modifica la tabla si ya existe; el CRUD usa los nombres y nulabilidad
--- definidos aquí y preserva las columnas de la arquitectura multiempresa.
+-- Esquema del catálogo administrativo de companies.
 CREATE TABLE IF NOT EXISTS `companies` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `guid` char(36) NOT NULL,
@@ -18,10 +16,10 @@ CREATE TABLE IF NOT EXISTS `companies` (
   `rfc` varchar(50) DEFAULT NULL,
   `direccion` varchar(255) DEFAULT NULL,
   `telefono` varchar(50) DEFAULT NULL,
-  `database_name` varchar(128) NOT NULL,
-  `database_user` varchar(128) NOT NULL,
-  `database_password` text NOT NULL,
-  `estado` varchar(50) DEFAULT 'activo',
+  `db_name` varchar(128) DEFAULT NULL,
+  `db_username` varchar(128) DEFAULT NULL,
+  `db_password_encrypted` varbinary(512) DEFAULT NULL,
+  `estado` varchar(20) NOT NULL DEFAULT 'activo',
   PRIMARY KEY (`id`),
   UNIQUE KEY `guid` (`guid`),
   UNIQUE KEY `code` (`code`)
@@ -29,35 +27,70 @@ CREATE TABLE IF NOT EXISTS `companies` (
   DEFAULT CHARSET=utf8mb4
   COLLATE=utf8mb4_0900_ai_ci;
 
-SET @company_database_name_sql = IF(
+SET @company_db_name_sql = IF(
   (SELECT COUNT(*) FROM information_schema.columns
    WHERE table_schema = DATABASE() AND table_name = 'companies'
-     AND column_name = 'database_name') = 0,
-  'ALTER TABLE companies ADD COLUMN database_name varchar(128) NULL',
+     AND column_name = 'db_name') = 0,
+  'ALTER TABLE companies ADD COLUMN db_name varchar(128) NULL',
   'SELECT 1'
 );
-PREPARE company_database_name_stmt FROM @company_database_name_sql;
-EXECUTE company_database_name_stmt;
-DEALLOCATE PREPARE company_database_name_stmt;
+PREPARE company_db_name_stmt FROM @company_db_name_sql;
+EXECUTE company_db_name_stmt;
+DEALLOCATE PREPARE company_db_name_stmt;
 
-SET @company_database_user_sql = IF(
+SET @company_db_username_sql = IF(
   (SELECT COUNT(*) FROM information_schema.columns
    WHERE table_schema = DATABASE() AND table_name = 'companies'
-     AND column_name = 'database_user') = 0,
-  'ALTER TABLE companies ADD COLUMN database_user varchar(128) NULL',
+     AND column_name = 'db_username') = 0,
+  'ALTER TABLE companies ADD COLUMN db_username varchar(128) NULL',
   'SELECT 1'
 );
-PREPARE company_database_user_stmt FROM @company_database_user_sql;
-EXECUTE company_database_user_stmt;
-DEALLOCATE PREPARE company_database_user_stmt;
+PREPARE company_db_username_stmt FROM @company_db_username_sql;
+EXECUTE company_db_username_stmt;
+DEALLOCATE PREPARE company_db_username_stmt;
 
-SET @company_database_password_sql = IF(
+SET @company_db_password_encrypted_sql = IF(
   (SELECT COUNT(*) FROM information_schema.columns
    WHERE table_schema = DATABASE() AND table_name = 'companies'
-     AND column_name = 'database_password') = 0,
-  'ALTER TABLE companies ADD COLUMN database_password text NULL',
+     AND column_name = 'db_password_encrypted') = 0,
+  'ALTER TABLE companies ADD COLUMN db_password_encrypted varbinary(512) NULL',
   'SELECT 1'
 );
-PREPARE company_database_password_stmt FROM @company_database_password_sql;
-EXECUTE company_database_password_stmt;
-DEALLOCATE PREPARE company_database_password_stmt;
+PREPARE company_db_password_encrypted_stmt FROM @company_db_password_encrypted_sql;
+EXECUTE company_db_password_encrypted_stmt;
+DEALLOCATE PREPARE company_db_password_encrypted_stmt;
+
+-- Permite que las altas del CRUD funcionen en instalaciones que aún tengan
+-- las antiguas columnas de credenciales en texto plano, sin volver a usarlas.
+SET @company_legacy_database_name_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'companies'
+     AND column_name = 'database_name') > 0,
+  'ALTER TABLE companies MODIFY COLUMN database_name varchar(128) NULL',
+  'SELECT 1'
+);
+PREPARE company_legacy_database_name_stmt FROM @company_legacy_database_name_sql;
+EXECUTE company_legacy_database_name_stmt;
+DEALLOCATE PREPARE company_legacy_database_name_stmt;
+
+SET @company_legacy_database_user_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'companies'
+     AND column_name = 'database_user') > 0,
+  'ALTER TABLE companies MODIFY COLUMN database_user varchar(128) NULL',
+  'SELECT 1'
+);
+PREPARE company_legacy_database_user_stmt FROM @company_legacy_database_user_sql;
+EXECUTE company_legacy_database_user_stmt;
+DEALLOCATE PREPARE company_legacy_database_user_stmt;
+
+SET @company_legacy_database_password_sql = IF(
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_schema = DATABASE() AND table_name = 'companies'
+     AND column_name = 'database_password') > 0,
+  'ALTER TABLE companies MODIFY COLUMN database_password text NULL',
+  'SELECT 1'
+);
+PREPARE company_legacy_database_password_stmt FROM @company_legacy_database_password_sql;
+EXECUTE company_legacy_database_password_stmt;
+DEALLOCATE PREPARE company_legacy_database_password_stmt;

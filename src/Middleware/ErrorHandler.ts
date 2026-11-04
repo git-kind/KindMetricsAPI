@@ -12,7 +12,15 @@ function normalizeErrorCollection(error: unknown): ApiError[] {
           return createError('VALIDATION_ERROR', 'Hay errores de validación.');
         }
 
-        const pathValue = 'path' in issue && Array.isArray(issue.path) ? issue.path.join('.') : undefined;
+        const pathValue = 'path' in issue && Array.isArray(issue.path)
+          ? issue.path.join('.')
+          : 'instancePath' in issue && typeof issue.instancePath === 'string'
+            ? issue.instancePath
+              .split('/')
+              .filter(Boolean)
+              .map((segment: string) => segment.replace(/~1/g, '/').replace(/~0/g, '~'))
+              .join('.')
+            : undefined;
         const messageValue = 'message' in issue && typeof issue.message === 'string' ? issue.message : 'Hay errores de validación.';
         return createError('VALIDATION_ERROR', messageValue, pathValue);
       })
@@ -37,10 +45,30 @@ function isDatabaseConnectionError(error: unknown): boolean {
   ].includes(error.code);
 }
 
+function safeErrorMetadata(error: unknown): Record<string, string | number> {
+  if (!error || typeof error !== 'object') return {};
+  const metadata: Record<string, string | number> = {};
+  for (const key of ['code', 'errno', 'sqlState'] as const) {
+    const value = key === 'code'
+      ? 'code' in error ? error.code : undefined
+      : key === 'errno'
+        ? 'errno' in error ? error.errno : undefined
+        : 'sqlState' in error ? error.sqlState : undefined;
+    if (typeof value === 'string' || typeof value === 'number') metadata[key] = value;
+  }
+  return metadata;
+}
+
 export function handleApiError(error: unknown, request: FastifyRequest, reply: FastifyReply): void {
   const requestId = request.id;
 
   if (error instanceof AppError) {
+    if (error.cause) {
+      request.log.error(
+        { code: error.code, databaseError: safeErrorMetadata(error.cause) },
+        'Company database initialization failed',
+      );
+    }
     reply.code(error.statusCode).send(
       buildErrorResponse(error.message, [createError(error.code, error.message, error.field)], requestId),
     );

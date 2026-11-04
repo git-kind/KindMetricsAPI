@@ -1,31 +1,45 @@
-import type { ResultSetHeader, RowDataPacket } from 'mysql2';
-import { pool } from '../Config/DatabaseConfig.js';
+import type { RowDataPacket } from 'mysql2';
+import { randomUUID } from 'node:crypto';
 import type { ManagedUserDto } from '../Models/Users/UserManagementDto.js';
+import { callRows } from './StoredProcedures/ProcedureExecutor.js';
 
-type ManagedUserRow = RowDataPacket & ManagedUserDto;
+type ManagedUserRow = RowDataPacket & {
+  id: number;
+  name: string;
+  email: string;
+  perfil: 'Admin' | 'Visor';
+};
 
-const userColumns = 'id, name AS nombre, email, perfil';
+type EmailTakenRow = RowDataPacket & {
+  is_taken: number | boolean;
+};
 
 export async function listManagedUsers(): Promise<ManagedUserDto[]> {
-  const [rows] = await pool.execute<ManagedUserRow[]>(
-    `SELECT ${userColumns}
-     FROM users
-     WHERE UPPER(TRIM(status)) IN ('ACTIVE', 'ACTIVO')
-     ORDER BY name, email`,
-  );
-  return rows;
+  const rows = await callRows<ManagedUserRow>('sp_user_management_list');
+  return rows.map(({ id, name, email, perfil }) => ({
+    id,
+    nombre: name,
+    email,
+    perfil,
+  }));
 }
 
 export async function getManagedUserById(id: number): Promise<ManagedUserDto | undefined> {
-  const [rows] = await pool.execute<ManagedUserRow[]>(
-    `SELECT ${userColumns}
-     FROM users
-     WHERE id = ?
-       AND UPPER(TRIM(status)) IN ('ACTIVE', 'ACTIVO')
-     LIMIT 1`,
-    [id],
-  );
-  return rows[0];
+  const [row] = await callRows<ManagedUserRow>('sp_user_management_get_by_id', [id]);
+  return row
+    ? { id: row.id, nombre: row.name, email: row.email, perfil: row.perfil }
+    : undefined;
+}
+
+export async function isManagedUserEmailTaken(
+  email: string,
+  excludeId: number | null = null,
+): Promise<boolean> {
+  const [row] = await callRows<EmailTakenRow>('sp_user_management_email_exists', [
+    email,
+    excludeId,
+  ]);
+  return row?.is_taken === true || Number(row?.is_taken) === 1;
 }
 
 export async function createManagedUser(input: {
@@ -34,12 +48,16 @@ export async function createManagedUser(input: {
   perfil: 'Admin' | 'Visor';
   passwordHash: string;
 }): Promise<ManagedUserDto | undefined> {
-  const [result] = await pool.execute<ResultSetHeader>(
-    `INSERT INTO users (guid, name, email, password_hash, perfil, status)
-     VALUES (UUID(), ?, ?, ?, ?, 'ACTIVE')`,
-    [input.nombre, input.email, input.passwordHash, input.perfil],
-  );
-  return getManagedUserById(result.insertId);
+  const [row] = await callRows<ManagedUserRow>('sp_user_management_create', [
+    randomUUID(),
+    input.email,
+    input.nombre,
+    input.perfil,
+    input.passwordHash,
+  ]);
+  return row
+    ? { id: row.id, nombre: row.name, email: row.email, perfil: row.perfil }
+    : undefined;
 }
 
 export async function updateManagedUser(
@@ -51,60 +69,25 @@ export async function updateManagedUser(
     passwordHash?: string;
   },
 ): Promise<ManagedUserDto | undefined> {
-  const assignments: string[] = [];
-  const values: string[] = [];
-
-  if (input.nombre !== undefined) {
-    assignments.push('name = ?');
-    values.push(input.nombre);
-  }
-  if (input.email !== undefined) {
-    assignments.push('email = ?');
-    values.push(input.email);
-  }
-  if (input.perfil !== undefined) {
-    assignments.push('perfil = ?');
-    values.push(input.perfil);
-  }
-  if (input.passwordHash !== undefined) {
-    assignments.push('password_hash = ?');
-    values.push(input.passwordHash);
-  }
-
-  values.push(String(id));
-  await pool.execute<ResultSetHeader>(
-    `UPDATE users
-     SET ${assignments.join(', ')}
-     WHERE id = ?
-       AND UPPER(TRIM(status)) IN ('ACTIVE', 'ACTIVO')`,
-    values,
-  );
-  return getManagedUserById(id);
+  const payload = {
+    ...(input.nombre !== undefined ? { name: input.nombre } : {}),
+    ...(input.email !== undefined ? { email: input.email } : {}),
+    ...(input.perfil !== undefined ? { perfil: input.perfil } : {}),
+    ...(input.passwordHash !== undefined ? { password_hash: input.passwordHash } : {}),
+  };
+  const [row] = await callRows<ManagedUserRow>('sp_user_management_update', [
+    id,
+    JSON.stringify(payload),
+  ]);
+  return row
+    ? { id: row.id, nombre: row.name, email: row.email, perfil: row.perfil }
+    : undefined;
 }
 
 export async function deactivateManagedUser(id: number): Promise<boolean> {
-  if (id <= 0) {
-    return false;
-  }
-  const [result] = await pool.execute<ResultSetHeader>(
-    `UPDATE users
-     SET status = 'INACTIVE'
-     WHERE id = ?
-       AND UPPER(TRIM(status)) IN ('ACTIVE', 'ACTIVO')
-       AND LOWER(email) <> 'admin@kindtech.com'`,
+  const [row] = await callRows<{ deactivated: number | boolean } & RowDataPacket>(
+    'sp_user_management_deactivate',
     [id],
   );
-  return result.affectedRows > 0;
-}
-
-export async function isManagedUserEmailTaken(email: string, exceptId?: number): Promise<boolean> {
-  const [rows] = await pool.execute<RowDataPacket[]>(
-    `SELECT id
-     FROM users
-     WHERE LOWER(email) = ?
-       AND (? IS NULL OR id <> ?)
-     LIMIT 1`,
-    [email.toLowerCase(), exceptId ?? null, exceptId ?? null],
-  );
-  return rows.length > 0;
+  return row?.deactivated === true || Number(row?.deactivated) === 1;
 }

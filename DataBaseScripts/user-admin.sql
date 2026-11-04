@@ -7,13 +7,19 @@ INSERT INTO Users (
     name,
     password_hash,
     is_platform_admin,
+    perfil,
     status
 )
-VALUES (
+SELECT
     UUID(),
     'admin@kindtech.com',
     'Admin Erick',
     '$argon2id$v=19$m=65536,t=3,p=4$erw4KDQFhlo0kipBYvNhOQ$CasSsn7WSIdQQNuK/li2l7Ae2kn9dUnCKpLOja4LBD0',
     1,
+    'Admin',
     'ACTIVE'
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM users
+    WHERE LOWER(email) = 'admin@kindtech.com'
 );

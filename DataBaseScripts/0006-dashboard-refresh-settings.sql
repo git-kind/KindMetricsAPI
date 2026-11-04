@@ -31,6 +31,8 @@ CREATE PROCEDURE sp_dashboard_list(
   IN p_sort_direction VARCHAR(4), IN p_include_inactive TINYINT
 )
 BEGIN
+  DECLARE v_offset INT UNSIGNED;
+
   IF p_page IS NULL OR p_page < 1 OR p_page_size IS NULL OR p_page_size < 1 OR p_page_size > 100
      OR p_sort_by IS NULL OR p_sort_direction IS NULL OR p_include_inactive IS NULL
      OR p_sort_by NOT IN ('name', 'createdAt', 'updatedAt', 'status')
@@ -39,6 +41,7 @@ BEGIN
      OR (p_tags IS NOT NULL AND JSON_TYPE(p_tags) <> 'ARRAY') THEN
     SIGNAL SQLSTATE '22023' SET MESSAGE_TEXT = 'INVALID_DASHBOARD_FILTER';
   END IF;
+  SET v_offset = (p_page - 1) * p_page_size;
 
   SELECT d.id, d.guid, d.name, d.description, d.folder_id, d.tags, d.status,
          d.refresh_enabled, d.refresh_interval_seconds, d.version,
@@ -59,7 +62,7 @@ BEGIN
     CASE WHEN p_sort_by = 'status' AND p_sort_direction = 'ASC' THEN d.status END ASC,
     CASE WHEN p_sort_by = 'status' AND p_sort_direction = 'DESC' THEN d.status END DESC,
     d.id DESC
-  LIMIT p_page_size OFFSET (p_page - 1) * p_page_size;
+  LIMIT p_page_size OFFSET v_offset;
 
   SELECT COUNT(*) AS total_count FROM dashboards d
   WHERE (p_search IS NULL OR d.name LIKE CONCAT('%', p_search, '%') OR COALESCE(d.description, '') LIKE CONCAT('%', p_search, '%'))

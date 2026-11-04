@@ -7,8 +7,7 @@ import {
   companyApiResponseSchema,
   companyIdParamsSchema,
   createCompanySchema,
-  companyConnectionTestResponseSchema,
-  testCompanyConnectionSchema,
+  provisionCompanyDatabaseSchema,
   updateCompanySchema,
 } from '../Models/Companies/CompanyManagementDto.js';
 import {
@@ -17,8 +16,8 @@ import {
   getCompanyManagementUserProfile,
   getCompanyById,
   listCompanies,
+  provisionCompanyDatabase,
   updateCompany,
-  testCompanyConnection,
 } from '../Repositories/CompanyManagementRepository.js';
 
 const responseSchemas = {
@@ -29,6 +28,8 @@ const responseSchemas = {
   403: companyApiResponseSchema,
   404: companyApiResponseSchema,
   409: companyApiResponseSchema,
+  422: companyApiResponseSchema,
+  503: companyApiResponseSchema,
 };
 
 function validationErrors(error: { issues: { message: string; path: PropertyKey[] }[] }) {
@@ -120,30 +121,43 @@ export async function companyManagementRoutes(app: FastifyInstance) {
   );
 
   app.post(
-    '/companies/management/test-connection',
+    '/companies/management/:id/database',
     {
       preHandler: adminHooks,
       schema: {
         tags: ['Company management'],
+        description: 'Crea la base y los usuarios MySQL para una empresa ya registrada.',
+        body: provisionCompanyDatabaseSchema,
         response: {
-          200: companyConnectionTestResponseSchema,
-          400: companyConnectionTestResponseSchema,
-          401: companyConnectionTestResponseSchema,
-          403: companyConnectionTestResponseSchema,
-          422: companyConnectionTestResponseSchema,
+          201: companyApiResponseSchema,
+          400: companyApiResponseSchema,
+          401: companyApiResponseSchema,
+          403: companyApiResponseSchema,
+          404: companyApiResponseSchema,
+          409: companyApiResponseSchema,
+          422: companyApiResponseSchema,
+          503: companyApiResponseSchema,
         },
       },
     },
     async (request, reply) => {
-      const parsed = testCompanyConnectionSchema.safeParse(request.body);
-      if (!parsed.success) {
+      const params = companyIdParamsSchema.safeParse(request.params);
+      const parsed = provisionCompanyDatabaseSchema.safeParse(request.body);
+      if (!params.success || !parsed.success) {
         return reply.code(400).send(
-          buildErrorResponse('Existen errores de validación.', validationErrors(parsed.error), request.id),
+          buildErrorResponse(
+            'Existen errores de validación.',
+            [
+              ...(params.success ? [] : validationErrors(params.error)),
+              ...(parsed.success ? [] : validationErrors(parsed.error)),
+            ],
+            request.id,
+          ),
         );
       }
-      const result = await testCompanyConnection(parsed.data);
-      return reply.code(200).send(
-        buildSuccessResponse(result, request.id, 'Conexión de empresa comprobada correctamente.'),
+      const company = await provisionCompanyDatabase(params.data.id, parsed.data);
+      return reply.code(201).send(
+        buildSuccessResponse(company, request.id, 'Base de datos aprovisionada correctamente.'),
       );
     },
   );
@@ -152,7 +166,11 @@ export async function companyManagementRoutes(app: FastifyInstance) {
     '/companies/management',
     {
       preHandler: adminHooks,
-      schema: { tags: ['Company management'], response: responseSchemas },
+      schema: {
+        tags: ['Company management'],
+        body: createCompanySchema,
+        response: responseSchemas,
+      },
     },
     async (request, reply) => {
       const parsed = createCompanySchema.safeParse(request.body);
@@ -164,7 +182,7 @@ export async function companyManagementRoutes(app: FastifyInstance) {
 
       const company = await createCompany(parsed.data);
       return reply.code(201).send(
-        buildSuccessResponse(company, request.id, 'Empresa creada correctamente.'),
+        buildSuccessResponse(company, request.id, 'Empresa registrada. La base de datos está pendiente de aprovisionamiento.'),
       );
     },
   );

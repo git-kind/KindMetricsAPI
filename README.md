@@ -17,6 +17,15 @@ Esta regla aplica a todo endpoint nuevo y a cualquier reorganización del API ex
 
 El patrón de registro vigente está en `src/Routes/ApiRoutes.ts`; los CRUD compartidos están identificados individualmente en `src/Controllers/EntityController.ts`. Cualquier componente nuevo debe seguir la regla antes de considerarse completo.
 
+### Regla obligatoria: acceso a datos de cada empresa
+
+1. Los módulos que consultan o administran datos de una empresa (por ejemplo, dashboards, pestañas, paneles y procedimientos de dashboard) deben acceder a su base mediante `CompanyDatabaseRepository`; no deben ejecutar esas operaciones contra el catálogo administrativo ni crear conexiones directamente.
+2. Cada solicitud debe autenticar al usuario y resolver `x-company-code` contra el catálogo administrativo. La empresa debe existir y estar activa, y el usuario debe tener asignación vigente; los administradores de plataforma conservan únicamente la excepción global ya definida por las políticas de autenticación. No confiar en la selección del frontend.
+3. La resolución autorizada produce un `CompanyContext` que se pasa al repositorio de acceso a datos. `CompanyDatabaseRepository` y `CompanyConnectionService` usan ese contexto para buscar la configuración de conexión de la empresa en el catálogo, recuperar la base, usuario y contraseña cifrada, descifrar la contraseña y obtener el pool correspondiente. No aceptar nombres de base ni credenciales de conexión de la petición.
+4. `DB_COMPANY_DATABASE`, `DB_COMPANY_USER` y `DB_COMPANY_PASSWORD` no son configuración de conexión en `.env`; el nombre de la base y las credenciales se obtienen del registro de la empresa en KindMetrics. El entorno solo puede proporcionar configuración común de transporte/servidor, como `DB_COMPANY_HOST`, `DB_COMPANY_PORT`, `DB_COMPANY_SSL` y límites de pool.
+5. El pool debe permanecer aislado por empresa y reflejar cambios de configuración de conexión. Los stored procedures de datos de empresa se ejecutan únicamente en el pool de la empresa ya autorizada. Mantener las sentencias SQL de negocio en stored procedures y usar el ejecutor centralizado para llamarlos.
+6. No omitir ni debilitar la autorización de `x-company-code` en ninguna operación de dashboards, pestañas, paneles, procedimientos o ejecución de paneles. Agregar pruebas para acceso asignado, empresa no asignada/inactiva y separación de datos entre empresas.
+
 ## Regla obligatoria de DTOs y contratos HTTP
 
 1. Todos los DTOs HTTP deben ubicarse en `src/Models/`.
@@ -35,13 +44,32 @@ El patrón de registro vigente está en `src/Routes/ApiRoutes.ts`; los CRUD comp
 1. `npm ci` para instalar las dependencias exactas del lockfile, incluida la dependencia de desarrollo `tsx`.
 2. Copiar `.env.example` a `.env.dev` y configurar los valores requeridos; establecer `JWT_SECRET` aleatorio de al menos 32 bytes y las credenciales de MySQL. No usar los valores `CHANGE_ME` del ejemplo.
 3. Ejecutar `mysql -u root -p < database/001_schema_and_procedures.sql` en una base de pruebas. **La migración está pensada para instalación nueva**, no aplicarla sobre una base existente sin revisión.
-4. Crear usuario MySQL para API y otorgar permisos de ejecución de los procedimientos necesarios (verificar política de privilegios del despliegue). Configurar `MYSQL_USER` y `MYSQL_PASSWORD`.
+4. Crear usuario MySQL para API y otorgar permisos de ejecución de los procedimientos necesarios (verificar política de privilegios del despliegue). Configurar `MYSQL_USER` y `MYSQL_PASSWORD`. Configurar `MYSQL_SSL=true` para conexiones a MySQL por redes no confiables.
 5. En una instalación existente, después de que existan `users` y `companies`, ejecutar `mysql -u root -p kindmetrics < DataBaseScripts/user-company-access.sql`. El script crea la relación usuario–empresa (clave compuesta para permitir varias empresas por usuario) y recrea `sp_user_company_access_users`, `sp_user_company_access_companies` y `sp_user_company_access_replace`. Requiere MySQL 8.0 o posterior por el uso de `JSON_TABLE`; la asignación del conjunto completo de empresas se valida y actualiza en una transacción.
 6. Ejecutar `mysql -u root -p kindmetrics < DataBaseScripts/company-management.sql` para agregar los campos de conexión de empresas a instalaciones existentes.
-7. Configurar `COMPANY_CREDENTIALS_ENCRYPTION_KEY` con exactamente 64 caracteres hexadecimales (32 bytes). Generar una clave nueva por entorno y no almacenarla en el repositorio. La API cifra `database_password` con AES-256-GCM y nunca devuelve la contraseña ni su valor cifrado.
-8. Para crear el primer administrador global: configurar `BOOTSTRAP_ADMIN_EMAIL` y `BOOTSTRAP_ADMIN_PASSWORD` en el entorno, ejecutar `npm run bootstrap:admin`, y eliminar esas variables inmediatamente después.
-9. `npm run dev`; Swagger: `http://localhost:3001/docs`. En desarrollo, CORS admite frontends servidos desde `localhost`, `127.0.0.1` o `::1` en cualquier puerto; en QA/producción configura `CORS_ORIGIN` con los orígenes permitidos separados por comas. El servidor HTTP permanece disponible aunque MySQL no responda; las rutas que usan la base de datos devolverán `503 DATABASE_UNAVAILABLE` hasta restablecer la conexión. `/health` comprueba que la API responde, no la disponibilidad de MySQL.
-10. `npm run check` para lint, TypeScript y pruebas.
+7. Para habilitar el CRUD administrativo de empresas y usuarios, aplicar en este orden los scripts que falten: `0000-users-schema.sql`, `0001-company-database-connection.sql`, `user-company-access.sql`, `0002-users-companies-kind-erick-v2.sql` y `0010-management-stored-procedures.sql`. En instalaciones existentes, aplicar `0011-company-provisioning-procedure.sql` después de `0010` y antes de usar el endpoint de aprovisionamiento. Si el endpoint detecta el procedimiento anterior que activa la empresa inmediatamente, la deja inactiva y responde `COMPANY_PROCEDURE_MIGRATION_REQUIRED`; aplica `0011` y reintenta con las mismas credenciales. Los scripts definen `sp_company_management_provision_database` con `DEFINER='kindmetrics'@'%'` y `SQL SECURITY DEFINER`; los demás procedimientos administrativos usan `SQL SECURITY INVOKER`. La cuenta `kindmetrics@'%'` debe tener privilegios para crear bases y usuarios y conceder privilegios. El registro y el aprovisionamiento son operaciones separadas:
+   - `POST /api/v1/companies/management` registra una empresa en el catálogo, recibe `name`, `code`, `razon_social`, `rfc`, `direccion` y `telefono`, y la deja inactiva hasta aprovisionar la base.
+   - `POST /api/v1/companies/management/{id}/database` recibe `database_name`, `database_user` y `database_password`, crea la base y el usuario MySQL, instala el esquema y los procedimientos de Dashboards, Tabs, Panels y catálogo de procedimientos en la nueva base usando las credenciales de ese usuario, y activa la empresa solo al completar todos los pasos. Devuelve los datos de la empresa registrada sin credenciales. Si falla la instalación, la empresa permanece inactiva y se puede reintentar el mismo endpoint con el mismo nombre de base, usuario y contraseña.
+
+   `sp_company_management_provision_database` corre con los privilegios globales de `kindmetrics@'%'`. Un administrador debe conceder esos permisos una vez:
+
+   ```sql
+   GRANT ALL PRIVILEGES ON *.*
+   TO 'kindmetrics'@'%'
+   WITH GRANT OPTION;
+   ```
+
+   Este `GRANT` debe ejecutarse por una cuenta con autoridad administrativa. Es de alto riesgo: permite a `kindmetrics` administrar todas las bases del servidor y conceder privilegios a otras cuentas; no se recomienda en servidores compartidos. El usuario nuevo de cada empresa no accede a `kindmetrics`: solo se conecta a su propia base para ejecutar las migraciones. Los scripts `0001-dashboards-schema.sql` a `0009-dashboard-duplication-procedure-links.sql` se leen desde `DataBaseScripts` del despliegue y se aplican secuencialmente con `DELIMITER` procesado por la API.
+
+   El procedimiento crea la base, concede primero todos los privilegios de esa base a `MYSQL_USER@'%'`, crea después el usuario enviado por el formulario y le concede todos los privilegios de esa misma base. La cuenta de aplicación debe existir con ese host. Si la base o el usuario ya existen sin corresponder a un aprovisionamiento pendiente de la misma empresa, el aprovisionamiento falla. El host `%` permite iniciar sesión desde cualquier host que alcance MySQL, por lo que también se deben restringir las conexiones con firewall/red. Configura `DB_COMPANY_SSL=true` cuando la conexión a la base tenant viaje por una red no confiable; para la conexión administrativa de la API usa `MYSQL_SSL=true`.
+8. Configurar `COMPANY_DB_ENCRYPTION_KEY` con una clave Base64 válida de 32 bytes. Generar una clave nueva por entorno y no almacenarla en el repositorio. La API cifra `database_password` con AES-256-GCM y nunca devuelve la contraseña ni su valor cifrado.
+9. Para crear el primer administrador global: configurar `BOOTSTRAP_ADMIN_EMAIL` y `BOOTSTRAP_ADMIN_PASSWORD` en el entorno, ejecutar `npm run bootstrap:admin`, y eliminar esas variables inmediatamente después.
+10. `npm run dev`; Swagger: `http://localhost:3001/docs`. En desarrollo, CORS admite frontends servidos desde `localhost`, `127.0.0.1` o `::1` en cualquier puerto; en QA/producción configura `CORS_ORIGIN` con los orígenes permitidos separados por comas. El servidor HTTP permanece disponible aunque MySQL no responda; las rutas que usan la base de datos devolverán `503 DATABASE_UNAVAILABLE` hasta restablecer la conexión. `/health` comprueba que la API responde, no la disponibilidad de MySQL.
+11. `npm run check` para lint, TypeScript y pruebas.
+
+## Selector de empresas
+
+`GET /api/v1/companies/available` requiere un bearer token y devuelve únicamente `id`, `name` y `code` de las empresas activas asignadas al usuario autenticado. La identidad se toma del token; no se acepta un GUID de usuario del cliente. Los administradores de plataforma obtienen todas las empresas activas, conforme a la regla ya usada al validar `x-company-code`. Dashboards, pestañas, paneles y procedimientos siguen requiriendo el código de empresa y verifican acceso en cada solicitud. La UI debe consultar este endpoint para poblar el selector en lugar del endpoint administrativo `/companies/management`.
 
 ## Estándar obligatorio de respuestas HTTP
 

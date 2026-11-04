@@ -1,8 +1,10 @@
 import { pool } from '../../Config/DatabaseConfig.js';
-import type { RowDataPacket } from 'mysql2';
-export async function callRows<T>(name: string, args: (string | number | null)[]): Promise<T[]> {
-  if (!/^sp_[a-z0-9_]+$/.test(name)) throw new Error('Invalid procedure');
-  const placeholders = args.map(() => '?').join(',');
-  const [result] = await pool.query<RowDataPacket[][]>(`CALL ${name}(${placeholders})`, args);
-  return (result[0] ?? []) as T[];
+import { callStoredProcedure } from '../../Database/SqlExecutor.js';
+
+export async function callRows<T>(
+  name: string,
+  args: (string | number | null | Buffer)[] = [],
+): Promise<T[]> {
+  const resultSets = await callStoredProcedure<T>(pool, name, args);
+  return resultSets[0] ?? [];
 }

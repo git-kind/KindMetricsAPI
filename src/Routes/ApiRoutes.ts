@@ -4,6 +4,7 @@ import { entityRoutes } from '../Controllers/EntityController.js';
 import { userRoutes } from '../Controllers/UserController.js';
 import { userManagementRoutes } from '../Controllers/UserManagementController.js';
 import { companyManagementRoutes } from '../Controllers/CompanyManagementController.js';
+import { companySelectionRoutes } from '../Controllers/CompanySelectionController.js';
 import { userCompanyAccessRoutes } from '../Controllers/UserCompanyAccessController.js';
 import { queryRoutes } from '../Controllers/QueryController.js';
 import { dashboardRoutes } from './DashboardRoutes.js';
@@ -28,6 +29,9 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
 
   // Company management component
   await app.register(companyManagementRoutes, { prefix: apiPrefix });
+
+  // Authenticated company selection
+  await app.register(companySelectionRoutes, { prefix: apiPrefix });
 
   // User-company access component
   await app.register(userCompanyAccessRoutes, { prefix: apiPrefix });

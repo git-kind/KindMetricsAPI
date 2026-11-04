@@ -68,6 +68,33 @@ export async function listUserCompanyAccess(): Promise<UserCompanyAccessListDto>
   };
 }
 
+export async function listAvailableCompanies(
+  userGuid: string,
+): Promise<UserCompanyAccessCompanyDto[]> {
+  try {
+    return await callRows<UserCompanyAccessCompanyDto>(
+      'sp_user_available_companies',
+      [userGuid],
+    );
+  } catch (error) {
+    if (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      error.code === 'ER_SP_DOES_NOT_EXIST'
+    ) {
+      throw new AppError(
+        'La base de datos requiere actualizar los procedimientos de selección de empresas.',
+        {
+          statusCode: 503,
+          code: 'COMPANY_SELECTION_MIGRATION_REQUIRED',
+        },
+      );
+    }
+    throw error;
+  }
+}
+
 export async function replaceUserCompanyAccess(
   userGuid: string,
   companyIds: number[],
