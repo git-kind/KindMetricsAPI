@@ -25,6 +25,10 @@ describe('Dashboard routes', () => {
       expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs/{tabGuid}/panels/layout']).toBeDefined();
       expect(openapi.paths['/api/v1/dashboard-procedures'].get).toBeDefined();
       expect(openapi.paths['/api/v1/dashboard-procedures/{guid}'].patch).toBeDefined();
+      expect(openapi.paths['/api/v1/dashboard-metadata/schema'].get).toBeDefined();
+      expect(openapi.paths['/api/v1/dashboard-metadata/procedures'].get).toBeDefined();
+      expect(openapi.paths['/api/v1/dashboard-metadata/procedures/validate'].post).toBeDefined();
+      expect(openapi.paths['/api/v1/dashboard-metadata/procedures/preview'].post).toBeDefined();
       expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs'].get.responses['200']).toBeDefined();
       expect(openapi.paths['/api/v1/dashboards'].get.responses['503']).toBeDefined();
       expect(openapi.components.securitySchemes.companyCode.name).toBe('x-company-code');
@@ -40,6 +44,13 @@ describe('Dashboard routes', () => {
       });
       expect(missingCompany.statusCode).toBe(400);
       expect(missingCompany.json().errors[0].code).toBe('COMPANY_CODE_REQUIRED');
+      const metadataMissingCompany = await app.inject({
+        method: 'GET',
+        url: '/api/v1/dashboard-metadata/schema',
+        headers: { authorization: 'Bearer ' + token },
+      });
+      expect(metadataMissingCompany.statusCode).toBe(400);
+      expect(metadataMissingCompany.json().errors[0].code).toBe('COMPANY_CODE_REQUIRED');
     } finally {
       await app.close();
     }

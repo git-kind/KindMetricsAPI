@@ -11,6 +11,7 @@ import { dashboardRoutes } from './DashboardRoutes.js';
 import { dashboardTabsRoutes } from './DashboardTabsRoutes.js';
 import { dashboardPanelsRoutes } from './DashboardPanelsRoutes.js';
 import { dashboardProceduresRoutes } from './DashboardProceduresRoutes.js';
+import { dashboardMetadataRoutes } from './DashboardMetadataRoutes.js';
 
 const apiPrefix = '/api/v1';
 
@@ -44,4 +45,5 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   await app.register(dashboardTabsRoutes, { prefix: apiPrefix });
   await app.register(dashboardPanelsRoutes, { prefix: apiPrefix });
   await app.register(dashboardProceduresRoutes, { prefix: apiPrefix });
+  await app.register(dashboardMetadataRoutes, { prefix: apiPrefix });
 }

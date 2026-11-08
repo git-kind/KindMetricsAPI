@@ -16,22 +16,22 @@ function validationErrors(error: { issues: { message: string; path: PropertyKey[
 
 export class DashboardProceduresController {
   async list(request: FastifyRequest, reply: FastifyReply) {
-    const data = await service.list(request.company!);
-    return reply.code(200).send(buildSuccessResponse(data, request.id, 'Procedimientos autorizados obtenidos correctamente.'));
+    const data = await service.list(request.company!, await actorId(request.principal!.sub));
+    return reply.code(200).send(buildSuccessResponse(data, request.id, 'Stored Procedures compatibles obtenidos correctamente.'));
   }
 
   async get(request: FastifyRequest, reply: FastifyReply) {
     const params = dashboardProcedureGuidParamsSchema.safeParse(request.params);
     if (!params.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(params.error), request.id));
     const data = await service.get(request.company!, params.data.guid);
-    return reply.code(200).send(buildSuccessResponse(data, request.id, 'Procedimiento autorizado obtenido correctamente.'));
+    return reply.code(200).send(buildSuccessResponse(data, request.id, 'Stored Procedure obtenido correctamente.'));
   }
 
   async create(request: FastifyRequest, reply: FastifyReply) {
     const input = createDashboardProcedureSchema.safeParse(request.body);
     if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(input.error), request.id));
     const data = await service.create(request.company!, input.data, await actorId(request.principal!.sub));
-    return reply.code(201).send(buildSuccessResponse(data, request.id, 'Procedimiento registrado para revisión.'));
+    return reply.code(201).send(buildSuccessResponse(data, request.id, 'Stored Procedure registrado correctamente.'));
   }
 
   async update(request: FastifyRequest, reply: FastifyReply) {
@@ -40,7 +40,7 @@ export class DashboardProceduresController {
     const input = updateDashboardProcedureSchema.safeParse(request.body);
     if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(input.error), request.id));
     const data = await service.update(request.company!, params.data.guid, input.data, await actorId(request.principal!.sub));
-    return reply.code(200).send(buildSuccessResponse(data, request.id, 'Procedimiento autorizado actualizado correctamente.'));
+    return reply.code(200).send(buildSuccessResponse(data, request.id, 'Stored Procedure actualizado correctamente.'));
   }
 
   async delete(request: FastifyRequest, reply: FastifyReply) {

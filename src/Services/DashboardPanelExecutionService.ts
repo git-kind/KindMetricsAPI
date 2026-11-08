@@ -68,22 +68,33 @@ function normalizeRows(rows: Array<Record<string, unknown>>, columns: Array<{ na
         continue;
       }
       if (column.type === 'STRING') {
-        if (typeof value !== 'string' && !Buffer.isBuffer(value)) throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
+        if (typeof value !== 'string' && !Buffer.isBuffer(value))
+          throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
         normalized[column.name] = Buffer.isBuffer(value) ? value.toString('utf8') : value;
       } else if (column.type === 'NUMBER') {
         const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
         if (!Number.isFinite(numeric)) throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
         normalized[column.name] = Number.isSafeInteger(numeric) ? numeric : String(value);
       } else if (column.type === 'INTEGER') {
-        const integer = typeof value === 'bigint' ? value : typeof value === 'number' && Number.isSafeInteger(value) ? BigInt(value) : typeof value === 'string' && /^-?\d+$/.test(value) ? BigInt(value) : null;
+        const integer =
+          typeof value === 'bigint'
+            ? value
+            : typeof value === 'number' && Number.isSafeInteger(value)
+              ? BigInt(value)
+              : typeof value === 'string' && /^-?\d+$/.test(value)
+                ? BigInt(value)
+                : null;
         if (integer === null) throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
-        normalized[column.name] = integer <= BigInt(Number.MAX_SAFE_INTEGER) && integer >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(integer) : integer.toString();
+        normalized[column.name] =
+          integer <= BigInt(Number.MAX_SAFE_INTEGER) && integer >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(integer) : integer.toString();
       } else if (column.type === 'BOOLEAN') {
-        if (value !== true && value !== false && value !== 0 && value !== 1) throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
+        if (value !== true && value !== false && value !== 0 && value !== 1)
+          throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
         normalized[column.name] = value === true || value === 1;
       } else {
         const date = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : null;
-        if (!date || Number.isNaN(date.getTime())) throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
+        if (!date || Number.isNaN(date.getTime()))
+          throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
         normalized[column.name] = column.type === 'DATE' ? date.toISOString().slice(0, 10) : date.toISOString();
       }
     }
@@ -96,14 +107,7 @@ export class DashboardPanelExecutionService {
 
   constructor(private readonly repository = new DashboardPanelExecutionRepository()) {}
 
-  async execute(
-    company: CompanyContext,
-    dashboardGuid: string,
-    tabGuid: string,
-    panelGuid: string,
-    filters: ExecutionFilters,
-    userGuid: string,
-  ) {
+  async execute(company: CompanyContext, dashboardGuid: string, tabGuid: string, panelGuid: string, filters: ExecutionFilters, userGuid: string) {
     const config = await this.repository.getConfig(company, dashboardGuid, tabGuid, panelGuid);
     if (!config || config.status !== 'ACTIVE' || !config.isVisible || config.dashboardStatus !== 'ACTIVE' || config.tabStatus !== 'ACTIVE') {
       throw new AppError('El Panel no existe o no está disponible.', { statusCode: 404, code: 'DASHBOARD_PANEL_NOT_FOUND' });
@@ -125,7 +129,6 @@ export class DashboardPanelExecutionService {
         code: 'DASHBOARD_PROCEDURE_NOT_ACTIVE',
       });
     }
-
     const contract = catalogParametersSchema.safeParse(config.parametersSchema);
     const mapping = panelMappingsSchema.safeParse(config.procedureParams);
     const results = resultSchema.safeParse(config.resultSchema);
@@ -135,9 +138,11 @@ export class DashboardPanelExecutionService {
         code: 'DASHBOARD_PANEL_CONFIGURATION_INVALID',
       });
     }
-
     const mappedByName = new Map(mapping.data.parameters.map((parameter) => [parameter.name, parameter]));
-    if (mappedByName.size !== contract.data.parameters.length || contract.data.parameters.some((parameter) => mappedByName.get(parameter.name)?.type !== parameter.type)) {
+    if (
+      mappedByName.size !== contract.data.parameters.length ||
+      contract.data.parameters.some((parameter) => mappedByName.get(parameter.name)?.type !== parameter.type)
+    ) {
       throw new AppError('El mapeo de parámetros del Panel no coincide con el contrato autorizado.', {
         statusCode: 409,
         code: 'DASHBOARD_PANEL_PARAMETER_CONTRACT_MISMATCH',
@@ -160,12 +165,7 @@ export class DashboardPanelExecutionService {
       if (mappingEntry.source === 'DASHBOARD_FILTER') value = filters[mappingEntry.filter!];
       if (mappingEntry.source === 'STATIC') value = mappingEntry.value;
       if (mappingEntry.source === 'SYSTEM') {
-        value =
-          mappingEntry.systemKey === 'companyGuid'
-            ? company.guid
-            : mappingEntry.systemKey === 'companyId'
-              ? company.id
-              : userGuid;
+        value = mappingEntry.systemKey === 'companyGuid' ? company.guid : mappingEntry.systemKey === 'companyId' ? company.id : userGuid;
       }
       if ((value === undefined || value === null) && (parameter.required || mappingEntry.required)) {
         throw new AppError(`Falta un valor requerido para ${parameter.name}.`, {

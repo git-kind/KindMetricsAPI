@@ -3,21 +3,19 @@ import { z } from 'zod';
 const guid = z.string().uuid();
 const expectedVersion = z.number().int().positive().max(4_294_967_295).safe();
 const dataType = z.enum(['STRING', 'NUMBER', 'INTEGER', 'BOOLEAN', 'DATE', 'DATETIME']);
-const procedureName = z.string().regex(/^sp_dashboard_[a-z0-9_]{1,112}$/);
+const procedureName = z.string().regex(/^sp_dash_[a-zA-Z0-9_]{1,112}$/);
 
 const parametersSchema = z
   .object({
     schemaVersion: z.literal(1),
-    parameters: z
-      .array(z.object({ name: z.string().regex(/^p_[a-z][a-z0-9_]{0,62}$/), type: dataType, required: z.boolean() }).strict())
-      .max(64),
+    parameters: z.array(z.object({ name: z.string().regex(/^p_[a-z][a-z0-9_]{0,62}$/), type: dataType, required: z.boolean() }).strict()).max(64),
   })
   .strict()
   .refine((schema) => new Set(schema.parameters.map((parameter) => parameter.name)).size === schema.parameters.length, {
     message: 'Los nombres de parámetros deben ser únicos.',
   });
 
-const resultSchema = z
+export const resultSchema = z
   .object({
     schemaVersion: z.literal(1),
     columns: z.array(z.object({ name: z.string().min(1).max(128), type: dataType }).strict()).max(256),
@@ -46,17 +44,12 @@ export const updateDashboardProcedureSchema = z
     parametersSchema: parametersSchema.optional(),
     resultSchema: resultSchema.optional(),
     status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
-    approvalReference: z.string().trim().min(1).max(200).optional(),
     executionTimeoutSeconds: z.number().int().min(1).max(300).optional(),
     expectedVersion,
   })
   .strict()
   .refine((payload) => Object.keys(payload).some((key) => key !== 'expectedVersion'), {
     message: 'Debe proporcionar al menos una propiedad para actualizar.',
-  })
-  .refine((payload) => payload.status !== 'ACTIVE' || Boolean(payload.approvalReference), {
-    path: ['approvalReference'],
-    message: 'Activar el procedimiento requiere una referencia de aprobación.',
   });
 
 export const dashboardProcedureResponseSchema = z.object({

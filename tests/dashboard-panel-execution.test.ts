@@ -18,25 +18,12 @@ function config(overrides: Record<string, unknown> = {}) {
     dashboardStatus: 'ACTIVE',
     tabStatus: 'ACTIVE',
     dashboardProcedureGuid: '379cdbb6-251a-4a2d-b6d2-8e648943693a',
-    procedureName: 'sp_dashboard_summary',
+    procedureName: 'sp_dash_AVG_Calls_Duration',
     procedureStatus: 'ACTIVE',
-    parametersSchema: {
-      schemaVersion: 1,
-      parameters: [
-        { name: 'p_company_id', type: 'INTEGER', required: true },
-        { name: 'p_status', type: 'STRING', required: true },
-        { name: 'p_service_id', type: 'STRING', required: false },
-      ],
-    },
+    procedureSecurityType: 'INVOKER',
+    parametersSchema: { schemaVersion: 1, parameters: [] },
     resultSchema: { schemaVersion: 1, columns: [{ name: 'total_calls', type: 'INTEGER' }] },
-    procedureParams: {
-      schemaVersion: 1,
-      parameters: [
-        { name: 'p_company_id', type: 'INTEGER', source: 'SYSTEM', systemKey: 'companyId', required: true },
-        { name: 'p_status', type: 'STRING', source: 'STATIC', value: 'ACTIVE', required: true },
-        { name: 'p_service_id', type: 'STRING', source: 'DASHBOARD_FILTER', filter: 'serviceId', required: true },
-      ],
-    },
+    procedureParams: { schemaVersion: 1, parameters: [] },
     panelTimeoutSeconds: 30,
     procedureTimeoutSeconds: 20,
     ...overrides,
@@ -52,11 +39,11 @@ function createService(configOverrides: Record<string, unknown> = {}, resultRows
 }
 
 describe('Dashboard Panel execution', () => {
-  it('resolves system and static values from trusted configuration and normalizes results', async () => {
+  it('executes a parameter-free procedure and normalizes results', async () => {
     const { service, repository } = createService();
-    const result = await service.execute(company, dashboardGuid, tabGuid, panelGuid, { serviceId: 'svc-1' }, userGuid);
+    const result = await service.execute(company, dashboardGuid, tabGuid, panelGuid, {}, userGuid);
 
-    expect(repository.execute).toHaveBeenCalledWith(company, 'sp_dashboard_summary', [7, 'ACTIVE', 'svc-1'], 20);
+    expect(repository.execute).toHaveBeenCalledWith(company, 'sp_dash_AVG_Calls_Duration', [], 20);
     expect(result.rows).toEqual([{ total_calls: 42 }]);
     expect(result.columns).toEqual([{ name: 'total_calls', type: 'INTEGER' }]);
   });
@@ -64,7 +51,7 @@ describe('Dashboard Panel execution', () => {
   it('rejects filters not mapped by the Panel and does not execute the procedure', async () => {
     const { service, repository } = createService();
 
-    await expect(service.execute(company, dashboardGuid, tabGuid, panelGuid, { admin: true }, userGuid)).rejects.toMatchObject({
+    await expect(service.execute(company, dashboardGuid, tabGuid, panelGuid, { serviceId: 'svc-1' }, userGuid)).rejects.toMatchObject({
       code: 'DASHBOARD_PANEL_FILTER_UNKNOWN',
       statusCode: 400,
     });
@@ -73,14 +60,34 @@ describe('Dashboard Panel execution', () => {
 
   it('rejects missing required mapped values and inactive resources', async () => {
     const { service, repository } = createService();
-    await expect(service.execute(company, dashboardGuid, tabGuid, panelGuid, {}, userGuid)).rejects.toMatchObject({
-      code: 'DASHBOARD_PANEL_PARAMETER_REQUIRED',
-    });
-
     const inactive = createService({ status: 'INACTIVE' });
     await expect(inactive.service.execute(company, dashboardGuid, tabGuid, panelGuid, {}, userGuid)).rejects.toMatchObject({
       code: 'DASHBOARD_PANEL_NOT_FOUND',
     });
     expect(repository.execute).not.toHaveBeenCalled();
+  });
+
+  it('executes parameter-free DEFINER procedures', async () => {
+    const { service, repository } = createService({ procedureSecurityType: 'DEFINER' });
+    await expect(service.execute(company, dashboardGuid, tabGuid, panelGuid, {}, userGuid)).resolves.toMatchObject({ rows: [{ total_calls: 42 }] });
+    expect(repository.execute).toHaveBeenCalledOnce();
+  });
+
+  it('executes Panel procedure parameters using the authorized mapping', async () => {
+    const parameterized = createService({
+      parametersSchema: {
+        schemaVersion: 1,
+        parameters: [{ name: 'p_id', type: 'INTEGER', required: true }],
+      },
+      procedureParams: {
+        schemaVersion: 1,
+        parameters: [{ name: 'p_id', type: 'INTEGER', source: 'STATIC', value: 1, required: true }],
+      },
+    });
+
+    await expect(parameterized.service.execute(company, dashboardGuid, tabGuid, panelGuid, {}, userGuid)).resolves.toMatchObject({
+      rows: [{ total_calls: 42 }],
+    });
+    expect(parameterized.repository.execute).toHaveBeenCalledWith(company, 'sp_dash_AVG_Calls_Duration', [1], 20);
   });
 });

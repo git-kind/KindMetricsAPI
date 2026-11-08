@@ -4,6 +4,7 @@ import type {
   CreateDashboardProcedureDto,
   UpdateDashboardProcedureDto,
 } from '../Models/DashboardProcedures/DashboardProcedureDto.js';
+import { DashboardMetadataRepository } from '../Repositories/DashboardMetadataRepository.js';
 import { DashboardProcedureRepository } from '../Repositories/DashboardProcedures/DashboardProcedureRepository.js';
 
 function persistenceError(error: unknown): never {
@@ -12,8 +13,6 @@ function persistenceError(error: unknown): never {
     throw new AppError('El procedimiento autorizado no existe.', { statusCode: 404, code: 'DASHBOARD_PROCEDURE_NOT_FOUND' });
   if (message.includes('DASHBOARD_PROCEDURE_IN_USE'))
     throw new AppError('No se puede eliminar el procedimiento porque está asociado a Paneles.', { statusCode: 409, code: 'DASHBOARD_PROCEDURE_IN_USE' });
-  if (message.includes('DASHBOARD_PROCEDURE_REVIEW_REQUIRED'))
-    throw new AppError('Se requiere aprobación de otro administrador antes de activar el procedimiento.', { statusCode: 409, code: 'DASHBOARD_PROCEDURE_REVIEW_REQUIRED' });
   if (message.includes('DASHBOARD_PROCEDURE_SIGNATURE_MISMATCH') || message.includes('DASHBOARD_PROCEDURE_NOT_AUTHORIZABLE'))
     throw new AppError('El procedimiento no existe, no está permitido o su firma no coincide.', { statusCode: 400, code: 'DASHBOARD_PROCEDURE_INVALID' });
   if (message.includes('DASHBOARD_VERSION_CONFLICT'))
@@ -24,10 +23,22 @@ function persistenceError(error: unknown): never {
 }
 
 export class DashboardProceduresService {
-  constructor(private readonly repository = new DashboardProcedureRepository()) {}
+  constructor(
+    private readonly repository = new DashboardProcedureRepository(),
+    private readonly metadataRepository = new DashboardMetadataRepository(),
+  ) {}
 
-  async list(company: CompanyContext) {
+  async list(company: CompanyContext, actor: number) {
     try {
+      const discovered = await this.metadataRepository.discoverProcedures(company);
+      for (const procedure of discovered) {
+        if (
+          procedure.parameters.length === 0 &&
+          /^sp_dash_[a-zA-Z0-9_]{1,112}$/.test(procedure.procedureName)
+        ) {
+          await this.repository.syncNoParameterProcedure(company, procedure.procedureName, actor);
+        }
+      }
       return await this.repository.list(company, true);
     } catch (error) {
       return persistenceError(error);

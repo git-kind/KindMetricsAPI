@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS dashboard_procedures (
   description TEXT NULL,
   parameters_schema JSON NOT NULL,
   result_schema JSON NOT NULL,
-  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+  status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
   execution_timeout_seconds INT UNSIGNED NOT NULL DEFAULT 30,
   version INT UNSIGNED NOT NULL DEFAULT 1,
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
@@ -77,6 +77,70 @@ BEGIN
   ORDER BY procedure_name, id;
 END$$
 
+DROP PROCEDURE IF EXISTS sp_dashboard_procedure_sync_no_parameter$$
+CREATE PROCEDURE sp_dashboard_procedure_sync_no_parameter(
+  IN p_procedure_name VARCHAR(128), IN p_actor BIGINT UNSIGNED
+)
+BEGIN
+  IF p_actor IS NULL OR p_procedure_name NOT REGEXP '^sp_dash_[A-Za-z0-9_]{1,112}$'
+     OR NOT EXISTS (
+       SELECT 1 FROM information_schema.ROUTINES
+       WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = p_procedure_name
+         AND ROUTINE_TYPE = 'PROCEDURE'
+     )
+     OR EXISTS (
+       SELECT 1 FROM information_schema.PARAMETERS
+       WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = p_procedure_name
+     ) THEN
+    SIGNAL SQLSTATE '22023' SET MESSAGE_TEXT = 'DASHBOARD_PROCEDURE_NOT_SUPPORTED';
+  END IF;
+  INSERT INTO dashboard_procedures(
+    guid, procedure_name, description, parameters_schema, result_schema, status,
+    execution_timeout_seconds, version, created_by
+  )
+  VALUES(
+    UUID(), p_procedure_name, NULL,
+    JSON_OBJECT('schemaVersion', 1, 'parameters', JSON_ARRAY()),
+    JSON_OBJECT('schemaVersion', 1, 'columns', JSON_ARRAY()),
+    'ACTIVE', 30, 1, p_actor
+  )
+  ON DUPLICATE KEY UPDATE
+    id = LAST_INSERT_ID(id),
+    version = version + IF(status <> 'ACTIVE', 1, 0),
+    updated_by = IF(status <> 'ACTIVE', p_actor, updated_by),
+    updated_at = IF(status <> 'ACTIVE', CURRENT_TIMESTAMP(3), updated_at),
+    parameters_schema = JSON_OBJECT('schemaVersion', 1, 'parameters', JSON_ARRAY()),
+    status = 'ACTIVE',
+    reviewed_by = NULL,
+    approval_reference = NULL;
+  SELECT id, guid, procedure_name, description, parameters_schema, result_schema, status,
+    execution_timeout_seconds, version, created_at, created_by, updated_at, updated_by, reviewed_by, approval_reference
+  FROM dashboard_procedures
+  WHERE procedure_name = p_procedure_name
+  LIMIT 1;
+END$$
+
+DROP PROCEDURE IF EXISTS sp_dashboard_procedure_result_schema_sync$$
+CREATE PROCEDURE sp_dashboard_procedure_result_schema_sync(
+  IN p_procedure_name VARCHAR(128), IN p_result_schema JSON
+)
+BEGIN
+  IF p_procedure_name NOT REGEXP '^sp_dash_[A-Za-z0-9_]{1,112}$'
+     OR p_result_schema IS NULL
+     OR JSON_TYPE(p_result_schema) <> 'OBJECT'
+     OR JSON_VALUE(p_result_schema, '$.schemaVersion' RETURNING UNSIGNED) <> 1
+     OR JSON_TYPE(JSON_EXTRACT(p_result_schema, '$.columns')) <> 'ARRAY' THEN
+    SIGNAL SQLSTATE '22023' SET MESSAGE_TEXT = 'INVALID_DASHBOARD_PROCEDURE_RESULT_SCHEMA';
+  END IF;
+  UPDATE dashboard_procedures
+  SET result_schema = p_result_schema
+  WHERE procedure_name = p_procedure_name AND status = 'ACTIVE'
+    AND JSON_LENGTH(JSON_EXTRACT(parameters_schema, '$.parameters')) = 0;
+  IF ROW_COUNT() <> 1 THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'DASHBOARD_PROCEDURE_NOT_ACTIVE';
+  END IF;
+END$$
+
 DROP PROCEDURE IF EXISTS sp_dashboard_procedure_get$$
 CREATE PROCEDURE sp_dashboard_procedure_get(IN p_guid CHAR(36), IN p_include_inactive TINYINT)
 BEGIN
@@ -106,7 +170,7 @@ BEGIN
   SET v_name = JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.procedureName'));
   SET v_parameter_count = JSON_LENGTH(JSON_EXTRACT(p_payload, '$.parametersSchema.parameters'));
   SET v_timeout = COALESCE(JSON_VALUE(p_payload, '$.executionTimeoutSeconds' RETURNING UNSIGNED), 30);
-  IF v_name NOT REGEXP '^sp_dashboard_[a-z0-9_]{1,112}$' OR v_timeout < 1 OR v_timeout > 300
+  IF v_name NOT REGEXP '^sp_dash_[A-Za-z0-9_]{1,112}$' OR v_timeout < 1 OR v_timeout > 300
      OR JSON_LENGTH(JSON_EXTRACT(p_payload, '$.parametersSchema.parameters')) > 64
      OR NOT EXISTS (SELECT 1 FROM information_schema.ROUTINES
                     WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = v_name AND ROUTINE_TYPE = 'PROCEDURE') THEN
@@ -136,7 +200,7 @@ BEGIN
     status, execution_timeout_seconds, created_by)
   VALUES(UUID(), v_name, JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.description')),
     JSON_EXTRACT(p_payload, '$.parametersSchema'), JSON_EXTRACT(p_payload, '$.resultSchema'),
-    'PENDING', v_timeout, p_actor);
+    'ACTIVE', v_timeout, p_actor);
     SELECT id, guid, procedure_name, description, parameters_schema, result_schema, status,
       execution_timeout_seconds, version, created_at, created_by, updated_at, updated_by, reviewed_by, approval_reference
   FROM dashboard_procedures WHERE id = LAST_INSERT_ID();
@@ -148,15 +212,12 @@ CREATE PROCEDURE sp_dashboard_procedure_update(
 )
 BEGIN
   DECLARE v_id BIGINT UNSIGNED;
-  DECLARE v_created_by BIGINT UNSIGNED;
   DECLARE v_version INT UNSIGNED;
   DECLARE v_status VARCHAR(20);
   DECLARE v_procedure_name VARCHAR(128);
   DECLARE v_parameters_schema JSON;
   DECLARE v_result_schema JSON;
   DECLARE v_next_status VARCHAR(20);
-  DECLARE v_contract_changed TINYINT DEFAULT 0;
-  DECLARE v_needs_review TINYINT DEFAULT 0;
   DECLARE v_expected_count INT UNSIGNED;
   DECLARE v_input_count INT UNSIGNED;
   DECLARE v_total_count INT UNSIGNED;
@@ -175,25 +236,18 @@ BEGIN
     SIGNAL SQLSTATE '22023' SET MESSAGE_TEXT = 'INVALID_DASHBOARD_PROCEDURE';
   END IF;
   START TRANSACTION;
-  SELECT id, created_by, version, status, procedure_name, parameters_schema, result_schema
-  INTO v_id, v_created_by, v_version, v_status, v_procedure_name, v_parameters_schema, v_result_schema
+  SELECT id, version, status, procedure_name, parameters_schema, result_schema
+  INTO v_id, v_version, v_status, v_procedure_name, v_parameters_schema, v_result_schema
   FROM dashboard_procedures WHERE guid = p_guid FOR UPDATE;
   IF v_id IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'DASHBOARD_PROCEDURE_NOT_FOUND'; END IF;
   IF v_version <> p_expected_version THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'DASHBOARD_VERSION_CONFLICT'; END IF;
-  SET v_contract_changed = JSON_CONTAINS_PATH(p_payload, 'one', '$.procedureName')
-    OR JSON_CONTAINS_PATH(p_payload, 'one', '$.parametersSchema')
-    OR JSON_CONTAINS_PATH(p_payload, 'one', '$.resultSchema');
   SET v_procedure_name = COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.procedureName')), v_procedure_name);
   SET v_parameters_schema = IF(JSON_CONTAINS_PATH(p_payload, 'one', '$.parametersSchema'),
     JSON_EXTRACT(p_payload, '$.parametersSchema'), v_parameters_schema);
   SET v_result_schema = IF(JSON_CONTAINS_PATH(p_payload, 'one', '$.resultSchema'),
     JSON_EXTRACT(p_payload, '$.resultSchema'), v_result_schema);
   SET v_next_status = COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.status')), v_status);
-  IF v_contract_changed = 1 AND NOT JSON_CONTAINS_PATH(p_payload, 'one', '$.status') THEN
-    SET v_next_status = 'PENDING';
-  END IF;
-  SET v_needs_review = v_next_status = 'ACTIVE' AND (v_status <> 'ACTIVE' OR v_contract_changed = 1);
-  IF v_procedure_name NOT REGEXP '^sp_dashboard_[a-z0-9_]{1,112}$'
+  IF v_procedure_name NOT REGEXP '^sp_dash_[A-Za-z0-9_]{1,112}$'
      OR JSON_TYPE(JSON_EXTRACT(v_parameters_schema, '$.parameters')) <> 'ARRAY'
      OR NOT EXISTS (SELECT 1 FROM information_schema.ROUTINES
                     WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = v_procedure_name AND ROUTINE_TYPE = 'PROCEDURE') THEN
@@ -220,14 +274,6 @@ BEGIN
   IF v_expected_count <> v_input_count OR v_expected_count <> v_total_count OR v_invalid_count > 0 THEN
     SIGNAL SQLSTATE '22023' SET MESSAGE_TEXT = 'DASHBOARD_PROCEDURE_SIGNATURE_MISMATCH';
   END IF;
-  IF v_needs_review = 1 THEN
-    IF p_actor = v_created_by OR JSON_TYPE(JSON_EXTRACT(p_payload, '$.approvalReference')) <> 'STRING'
-       OR CHAR_LENGTH(TRIM(JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.approvalReference')))) = 0 THEN
-      SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'DASHBOARD_PROCEDURE_REVIEW_REQUIRED';
-    END IF;
-    UPDATE dashboard_procedures SET reviewed_by = p_actor,
-      approval_reference = JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.approvalReference')) WHERE id = v_id;
-  END IF;
   UPDATE dashboard_procedures
   SET procedure_name = COALESCE(JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.procedureName')), procedure_name),
       description = IF(JSON_CONTAINS_PATH(p_payload, 'one', '$.description'),
@@ -236,8 +282,8 @@ BEGIN
       result_schema = IF(JSON_CONTAINS_PATH(p_payload, 'one', '$.resultSchema'), JSON_EXTRACT(p_payload, '$.resultSchema'), result_schema),
       status = v_next_status,
       execution_timeout_seconds = COALESCE(JSON_VALUE(p_payload, '$.executionTimeoutSeconds' RETURNING UNSIGNED), execution_timeout_seconds),
-      reviewed_by = IF(v_contract_changed = 1 AND v_next_status <> 'ACTIVE', NULL, reviewed_by),
-      approval_reference = IF(v_contract_changed = 1 AND v_next_status <> 'ACTIVE', NULL, approval_reference),
+      reviewed_by = NULL,
+      approval_reference = NULL,
       version = version + 1, updated_by = p_actor, updated_at = CURRENT_TIMESTAMP(3)
   WHERE id = v_id;
   COMMIT;

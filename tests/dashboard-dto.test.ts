@@ -4,8 +4,38 @@ import { createDashboardTabSchema, reorderDashboardTabsSchema } from '../src/Mod
 import { createDashboardPanelSchema, saveDashboardPanelLayoutSchema } from '../src/Models/Dashboards/DashboardPanelDto.js';
 import { executeDashboardPanelSchema } from '../src/Models/Dashboards/DashboardPanelDto.js';
 import { createDashboardProcedureSchema, updateDashboardProcedureSchema } from '../src/Models/DashboardProcedures/DashboardProcedureDto.js';
+import { dashboardProcedurePreviewSchema, dashboardSchemaQuerySchema } from '../src/Models/DashboardMetadata/DashboardMetadataDto.js';
 
 describe('Dashboard DTOs', () => {
+  it('validates Company metadata filters and preview procedure inputs', () => {
+    expect(dashboardSchemaQuerySchema.safeParse({ tableName: 'dashboard_panels' }).success).toBe(true);
+    expect(dashboardSchemaQuerySchema.safeParse({ tableName: 'panels; DROP TABLE users' }).success).toBe(false);
+    expect(
+      dashboardProcedurePreviewSchema.safeParse({
+        procedureName: 'sp_dash_summary',
+        parameters: {},
+      }).success,
+    ).toBe(true);
+    expect(
+      dashboardProcedurePreviewSchema.safeParse({
+        procedureName: 'sp_dash_AVG_Calls_Duration',
+      }).success,
+    ).toBe(true);
+    expect(
+      dashboardProcedurePreviewSchema.safeParse({
+        procedureName: 'sp_dash_summary',
+        parameters: { p_id: 1 },
+      }).success,
+    ).toBe(true);
+    expect(dashboardProcedurePreviewSchema.safeParse({ procedureName: 'sp_dashboard_summary' }).success).toBe(false);
+    expect(
+      dashboardProcedurePreviewSchema.safeParse({
+        procedureName: 'sp_dash_summary',
+        parameters: { p_range: { query: 'unexpected' } },
+      }).success,
+    ).toBe(false);
+  });
+
   it('accepts only dashboard properties on create', () => {
     expect(createDashboardSchema.safeParse({ name: ' Overview ', tags: [' ops '] }).data).toEqual({
       name: 'Overview',
@@ -107,9 +137,7 @@ describe('Dashboard DTOs', () => {
         visualizationConfig: { schemaVersion: 1, properties: { content: '<script>alert(1)</script>' } },
       }).success,
     ).toBe(false);
-    expect(
-      createDashboardPanelSchema.safeParse({ ...textPanel, panelType: 'NUMBER', dashboardProcedureGuid: null }).success,
-    ).toBe(false);
+    expect(createDashboardPanelSchema.safeParse({ ...textPanel, panelType: 'NUMBER', dashboardProcedureGuid: null }).success).toBe(false);
     expect(
       createDashboardPanelSchema.safeParse({
         ...textPanel,
@@ -121,7 +149,80 @@ describe('Dashboard DTOs', () => {
     ).toBe(true);
   });
 
-  it('validates panel execution filters and requires catalog approval before activation', () => {
+  it('accepts a bounded Panel grid and rejects mismatched cells and unsafe colors', () => {
+    const gridPanel = {
+      title: 'Call metrics',
+      panelType: 'PANEL',
+      gridX: 0,
+      gridY: 0,
+      gridW: 6,
+      gridH: 3,
+      dashboardProcedureGuid: 'b6f7a16e-fbd5-4cfb-976c-63b41852fa2a',
+      procedureParams: { schemaVersion: 1, parameters: [] },
+      visualizationConfig: {
+        schemaVersion: 1,
+        properties: {
+          columns: 2,
+          rows: 1,
+          cells: [
+            {
+              id: 'calls',
+              title: 'Calls',
+              source: 'FIELD',
+              field: 'total_calls',
+              format: 'number',
+              decimals: 0,
+              conditions: [
+                {
+                  expression: '[total_calls]',
+                  operator: 'GT',
+                  value: 100,
+                  backgroundColor: '#FEE2E2',
+                  textColor: '#991B1B',
+                },
+              ],
+            },
+            {
+              id: 'rate',
+              title: 'Call rate',
+              source: 'FORMULA',
+              formula: '[total_calls] / 60',
+              format: 'number',
+              decimals: 2,
+            },
+          ],
+        },
+      },
+    };
+
+    expect(createDashboardPanelSchema.safeParse(gridPanel).success).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...gridPanel,
+        visualizationConfig: {
+          ...gridPanel.visualizationConfig,
+          properties: { ...gridPanel.visualizationConfig.properties, columns: 3 },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...gridPanel,
+        visualizationConfig: {
+          ...gridPanel.visualizationConfig,
+          properties: {
+            ...gridPanel.visualizationConfig.properties,
+            cells: [
+              { ...gridPanel.visualizationConfig.properties.cells[0], backgroundColor: 'url(javascript:alert(1))' },
+              gridPanel.visualizationConfig.properties.cells[1],
+            ],
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('validates panel execution filters and procedure parameter contracts', () => {
     expect(executeDashboardPanelSchema.parse({ filters: { dateFrom: '2026-10-01', serviceId: 'svc-1' } })).toMatchObject({
       filters: { dateFrom: '2026-10-01', serviceId: 'svc-1' },
     });
@@ -129,17 +230,37 @@ describe('Dashboard DTOs', () => {
     expect(executeDashboardPanelSchema.safeParse({ filters: {}, procedureName: 'sp_dashboard_any' }).success).toBe(false);
 
     const catalogEntry = {
-      procedureName: 'sp_dashboard_calls_summary',
-      parametersSchema: { schemaVersion: 1, parameters: [{ name: 'p_range', type: 'STRING', required: true }] },
+      procedureName: 'sp_dash_calls_summary',
+      parametersSchema: { schemaVersion: 1, parameters: [] },
       resultSchema: { schemaVersion: 1, columns: [{ name: 'total_calls', type: 'INTEGER' }] },
     };
     expect(createDashboardProcedureSchema.safeParse(catalogEntry).success).toBe(true);
+    expect(
+      createDashboardProcedureSchema.safeParse({
+        ...catalogEntry,
+        procedureName: 'sp_dash_AVG_Calls_Duration',
+      }).success,
+    ).toBe(true);
+    expect(
+      createDashboardProcedureSchema.safeParse({
+        ...catalogEntry,
+        parametersSchema: {
+          schemaVersion: 1,
+          parameters: [{ name: 'p_range', type: 'STRING', required: true }],
+        },
+      }).success,
+    ).toBe(true);
+    expect(createDashboardProcedureSchema.safeParse({ ...catalogEntry, procedureName: 'sp_dashboard_calls_summary' }).success).toBe(false);
     expect(createDashboardProcedureSchema.safeParse({ ...catalogEntry, procedureName: 'sp_user_admin' }).success).toBe(false);
+    expect(updateDashboardProcedureSchema.safeParse({ status: 'ACTIVE', expectedVersion: 1 }).success).toBe(true);
     expect(
-      updateDashboardProcedureSchema.safeParse({ status: 'ACTIVE', expectedVersion: 1 }).success,
-    ).toBe(false);
-    expect(
-      updateDashboardProcedureSchema.safeParse({ status: 'ACTIVE', approvalReference: 'SEC-42', expectedVersion: 1 }).success,
+      updateDashboardProcedureSchema.safeParse({
+        parametersSchema: {
+          schemaVersion: 1,
+          parameters: [{ name: 'p_range', type: 'STRING', required: true }],
+        },
+        expectedVersion: 1,
+      }).success,
     ).toBe(true);
   });
 });

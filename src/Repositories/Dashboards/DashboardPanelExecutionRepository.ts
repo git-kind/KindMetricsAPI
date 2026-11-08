@@ -1,8 +1,6 @@
 import type { RowDataPacket } from 'mysql2';
 import type { CompanyContext } from '../../Models/Common.js';
 import { CompanyDatabaseRepository, type ProcedureParameter } from '../CompanyDatabaseRepository.js';
-import { companyConnectionService } from '../../Services/CompanyConnectionService.js';
-import { executeReadOnlyProcedure } from '../../Database/SqlExecutor.js';
 
 export type DashboardPanelExecutionConfig = {
   panelGuid: string;
@@ -14,6 +12,7 @@ export type DashboardPanelExecutionConfig = {
   dashboardProcedureGuid: string | null;
   procedureName: string | null;
   procedureStatus: string | null;
+  procedureSecurityType: string | null;
   parametersSchema: unknown;
   resultSchema: unknown;
   procedureParams: unknown;
@@ -42,6 +41,7 @@ export class DashboardPanelExecutionRepository {
       dashboardProcedureGuid: row.dashboard_procedure_guid == null ? null : String(row.dashboard_procedure_guid),
       procedureName: row.procedure_name == null ? null : String(row.procedure_name),
       procedureStatus: row.procedure_status == null ? null : String(row.procedure_status),
+      procedureSecurityType: row.procedure_security_type == null ? null : String(row.procedure_security_type),
       parametersSchema: parse(row.parameters_schema),
       resultSchema: parse(row.result_schema),
       procedureParams: parse(row.procedure_params),
@@ -51,8 +51,7 @@ export class DashboardPanelExecutionRepository {
   }
 
   async execute(company: CompanyContext, procedureName: string, parameters: readonly ProcedureParameter[], timeoutSeconds: number) {
-    if (!/^sp_dashboard_[a-z0-9_]{1,112}$/.test(procedureName)) throw new Error('Invalid authorized procedure name');
-    const pool = await companyConnectionService.getPool(company);
-    return executeReadOnlyProcedure(pool, procedureName, parameters, timeoutSeconds);
+    if (!/^sp_dash_[a-zA-Z0-9_]{1,112}$/.test(procedureName)) throw new Error('Invalid authorized procedure name');
+    return this.database.executeReadOnlyProcedure(company, procedureName, parameters, timeoutSeconds);
   }
 }

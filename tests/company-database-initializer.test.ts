@@ -90,12 +90,31 @@ describe('CompanyDatabaseInitializer', () => {
       'CREATE PROCEDURE sp_dashboard_panel_list',
       'CREATE TABLE IF NOT EXISTS dashboard_procedures',
       'CREATE PROCEDURE sp_dashboard_procedure_list',
+      'CREATE PROCEDURE sp_dashboard_procedure_sync_no_parameter',
+      'CREATE PROCEDURE sp_dashboard_procedure_result_schema_sync',
+      'CREATE PROCEDURE sp_dashboard_procedure_create',
     ];
     const statementIndexes = expectedMigrationStatements.map((expected) =>
       statements.findIndex((statement) => statement.includes(expected)),
     );
     expect(statementIndexes.every((index) => index >= 0)).toBe(true);
     expect(statementIndexes).toEqual([...statementIndexes].sort((a, b) => a - b));
+    const procedureCreate = statements.find((statement) =>
+      statement.includes('CREATE PROCEDURE sp_dashboard_procedure_create'),
+    );
+    const procedureUpdate = statements.find((statement) =>
+      statement.includes('CREATE PROCEDURE sp_dashboard_procedure_update'),
+    );
+    expect(procedureCreate).toContain("^sp_dash_[A-Za-z0-9_]{1,112}$");
+    expect(procedureCreate).toContain("'ACTIVE'");
+    expect(procedureCreate).not.toContain("SECURITY_TYPE = 'INVOKER'");
+    expect(procedureUpdate).toContain("^sp_dash_[A-Za-z0-9_]{1,112}$");
+    expect(procedureUpdate).not.toContain("SECURITY_TYPE = 'INVOKER'");
+    const procedureSync = statements.find((statement) =>
+      statement.includes('CREATE PROCEDURE sp_dashboard_procedure_sync_no_parameter'),
+    );
+    expect(procedureSync).not.toContain("SECURITY_TYPE = 'INVOKER'");
+    expect(procedureUpdate).not.toContain('DASHBOARD_PROCEDURE_REVIEW_REQUIRED');
     expect(endMock).toHaveBeenCalledOnce();
   });
 

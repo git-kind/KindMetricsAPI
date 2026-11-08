@@ -68,7 +68,7 @@ export async function resolveDashboardReadAccess(request: FastifyRequest, reply:
   }
 
   const profile = await getCompanyManagementUserProfile(request.principal!.sub);
-  if (profile === 'Admin') {
+  if (profile === 'Admin' || profile === 'Editor') {
     request.dashboardCanManage = true;
     return;
   }
@@ -91,10 +91,10 @@ export async function requireDashboardAdmin(request: FastifyRequest, reply: Fast
   }
 
   const profile = await getCompanyManagementUserProfile(request.principal!.sub);
-  if (profile !== 'Admin') {
+  if (profile !== 'Admin' && profile !== 'Editor') {
     return reply
       .code(403)
-      .send(buildErrorResponse('Acceso denegado.', [createError('COMPANY_PROFILE_FORBIDDEN', 'Solo Admin puede modificar Dashboards.')], request.id));
+      .send(buildErrorResponse('Acceso denegado.', [createError('COMPANY_PROFILE_FORBIDDEN', 'Solo Admin o Editor puede modificar Dashboards.')], request.id));
   }
   request.dashboardCanManage = true;
 }

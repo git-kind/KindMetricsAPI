@@ -21,7 +21,7 @@ type CompanyRow = RowDataPacket & {
 };
 
 type CompanyProfileRow = RowDataPacket & {
-  perfil: 'Admin' | 'Visor';
+  perfil: 'Admin' | 'Editor' | 'Visor';
 };
 
 type CompanyCodeRow = RowDataPacket & {
@@ -205,7 +205,7 @@ export async function listCompanies(): Promise<CompanyManagementDto[]> {
 
 export async function getCompanyManagementUserProfile(
   guid: string,
-): Promise<'Admin' | 'Visor' | undefined> {
+): Promise<'Admin' | 'Editor' | 'Visor' | undefined> {
   const [row] = await callRows<CompanyProfileRow>('sp_company_management_user_profile', [guid]);
   return row?.perfil;
 }

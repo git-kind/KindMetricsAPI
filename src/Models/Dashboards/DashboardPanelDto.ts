@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const guid = z.string().uuid();
 const expectedVersion = z.number().int().positive().max(4_294_967_295).safe();
-const panelTypes = ['NUMBER', 'TABLE', 'LINE', 'BAR', 'PIE', 'GAUGE', 'HEATMAP', 'MAP', 'TEXT', 'STAT'] as const;
+const panelTypes = ['NUMBER', 'TABLE', 'LINE', 'BAR', 'PIE', 'GAUGE', 'HEATMAP', 'MAP', 'TEXT', 'STAT', 'PANEL'] as const;
 const secretKey = /password|passwd|secret|token|credential|private.?key|api.?key/i;
 
 function validConfig(value: unknown): boolean {
@@ -76,6 +76,39 @@ const procedureParamsSchema = z
 const fieldName = z.string().trim().min(1).max(128);
 const color = z.string().trim().min(1).max(40);
 const thresholdSchema = z.object({ value: z.number().finite(), color }).strict();
+const panelGridConditionSchema = z.object({
+  expression: z.string().trim().min(1).max(512),
+  operator: z.enum(['GT', 'GTE', 'LT', 'LTE', 'EQ', 'NE']),
+  value: z.number().finite(),
+  backgroundColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
+  textColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
+}).strict().refine((condition) => condition.backgroundColor || condition.textColor);
+const panelGridCellSchema = z.discriminatedUnion('source', [
+  z.object({
+    id: z.string().min(1).max(64),
+    title: z.string().max(100),
+    source: z.literal('FIELD'),
+    field: fieldName,
+    format: z.enum(['text', 'number', 'currency', 'percent', 'duration', 'date', 'datetime']),
+    decimals: z.number().int().min(0).max(6).optional(),
+    unit: z.string().max(32).optional(),
+    backgroundColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
+    textColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
+    conditions: z.array(panelGridConditionSchema).max(8).optional(),
+  }).strict(),
+  z.object({
+    id: z.string().min(1).max(64),
+    title: z.string().max(100),
+    source: z.literal('FORMULA'),
+    formula: z.string().trim().min(1).max(512),
+    format: z.enum(['text', 'number', 'currency', 'percent', 'duration', 'date', 'datetime']),
+    decimals: z.number().int().min(0).max(6).optional(),
+    unit: z.string().max(32).optional(),
+    backgroundColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
+    textColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
+    conditions: z.array(panelGridConditionSchema).max(8).optional(),
+  }).strict(),
+]);
 const visualizationPropertiesSchemas = {
   NUMBER: z.object({
     valueField: fieldName,
@@ -150,6 +183,14 @@ const visualizationPropertiesSchemas = {
     marker: z.object({ color: color.optional(), size: z.number().int().min(1).max(64).optional(), cluster: z.boolean().optional() }).strict().optional(),
   }).strict(),
   TEXT: z.object({ content: z.string().max(20_000).refine((value) => !/[<>]/.test(value)), format: z.literal('plain').default('plain') }).strict(),
+  PANEL: z.object({
+    columns: z.number().int().min(1).max(12),
+    rows: z.number().int().min(1).max(8),
+    cells: z.array(panelGridCellSchema).min(1).max(48),
+  }).strict().refine((properties) =>
+    properties.cells.length === properties.columns * properties.rows &&
+    new Set(properties.cells.map((cell) => cell.id)).size === properties.cells.length,
+  ),
 } as const;
 
 export function validPanelVisualizationConfig(panelType: (typeof panelTypes)[number], config: z.infer<typeof configSchema> | null | undefined): boolean {

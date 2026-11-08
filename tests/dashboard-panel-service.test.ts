@@ -13,18 +13,26 @@ const procedureGuid = '379cdbb6-251a-4a2d-b6d2-8e648943693a';
 
 const procedure = {
   status: 'ACTIVE',
-  parametersSchema: { schemaVersion: 1, parameters: [{ name: 'p_service_id', type: 'STRING', required: true }] },
+  parametersSchema: { schemaVersion: 1, parameters: [] },
 };
 const parameterMapping = {
   schemaVersion: 1,
-  parameters: [{ name: 'p_service_id', type: 'STRING', source: 'DASHBOARD_FILTER', filter: 'serviceId', required: true }],
+  parameters: [],
 };
 const visualizationConfig = { schemaVersion: 1 as const, properties: { valueField: 'total_calls' } };
 
 describe('Dashboard Panel Service', () => {
-  it('rejects procedure mappings that differ from the active catalog contract', async () => {
+  it('rejects procedures with parameters for now', async () => {
     const panelsRepository = { create: vi.fn() } as unknown as DashboardPanelsRepository;
-    const proceduresRepository = { get: vi.fn().mockResolvedValue(procedure) } as unknown as DashboardProcedureRepository;
+    const proceduresRepository = {
+      get: vi.fn().mockResolvedValue({
+        status: 'ACTIVE',
+        parametersSchema: {
+          schemaVersion: 1,
+          parameters: [{ name: 'p_service_id', type: 'STRING', required: true }],
+        },
+      }),
+    } as unknown as DashboardProcedureRepository;
     const service = new DashboardPanelsService(panelsRepository, proceduresRepository);
     const input = createDashboardPanelSchema.parse({
       title: 'Calls',
@@ -42,7 +50,7 @@ describe('Dashboard Panel Service', () => {
     });
 
     await expect(service.create(company, dashboardGuid, tabGuid, input, 11)).rejects.toMatchObject({
-      code: 'DASHBOARD_PANEL_PARAMETER_CONTRACT_MISMATCH',
+      code: 'DASHBOARD_PROCEDURE_PARAMETERS_UNSUPPORTED',
     });
     expect(panelsRepository.create).not.toHaveBeenCalled();
   });

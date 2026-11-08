@@ -42,6 +42,12 @@ export class DashboardPanelsService {
     const schema = procedure.parametersSchema as { parameters?: Array<{ name: string; type: string; required: boolean }> };
     const mapping = procedureParams as { parameters?: Array<{ name: string; type: string; required: boolean }> } | null;
     const configured = mapping?.parameters ?? [];
+    if ((schema.parameters?.length ?? 0) > 0 || configured.length > 0) {
+      throw new AppError('Por ahora solo se permiten procedimientos sin parámetros.', {
+        statusCode: 400,
+        code: 'DASHBOARD_PROCEDURE_PARAMETERS_UNSUPPORTED',
+      });
+    }
     if (
       !mapping ||
       !Array.isArray(schema.parameters) ||

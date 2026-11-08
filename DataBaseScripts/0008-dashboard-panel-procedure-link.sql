@@ -330,6 +330,7 @@ BEGIN
   SELECT p.guid AS panel_guid, p.panel_type, p.status AS panel_status, p.is_visible,
          d.status AS dashboard_status, t.status AS tab_status,
          dp.guid AS dashboard_procedure_guid, dp.procedure_name, dp.status AS procedure_status,
+         r.security_type AS procedure_security_type,
          dp.parameters_schema, dp.result_schema, p.procedure_params,
          p.execution_timeout_seconds AS panel_timeout_seconds,
          dp.execution_timeout_seconds AS procedure_timeout_seconds
@@ -337,6 +338,8 @@ BEGIN
   JOIN dashboard_tabs t ON t.id = p.tab_id
   JOIN dashboards d ON d.id = t.dashboard_id
   LEFT JOIN dashboard_procedures dp ON dp.id = p.dashboard_procedure_id
+  LEFT JOIN information_schema.ROUTINES r
+    ON r.ROUTINE_SCHEMA = DATABASE() AND r.ROUTINE_NAME = dp.procedure_name AND r.ROUTINE_TYPE = 'PROCEDURE'
   WHERE d.guid = p_dashboard_guid AND t.guid = p_tab_guid AND p.guid = p_panel_guid
   LIMIT 1;
 END$$

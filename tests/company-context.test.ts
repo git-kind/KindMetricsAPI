@@ -156,7 +156,7 @@ describe('Company context resolution', () => {
     expect(request.company?.code).toBe('ACME');
   });
 
-  it('uses the existing Admin and Visor profiles for Dashboard authorization', async () => {
+  it('allows Admin and Editor to manage Dashboards while Visor remains read-only', async () => {
     const viewerRequest = requestWith('ACME');
     viewerRequest.company = {
       id: 8,
@@ -172,6 +172,16 @@ describe('Company context resolution', () => {
     vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Visor');
     await requireDashboardAdmin(viewerRequest, reply);
     expect(state.status).toBe(403);
+
+    const editorRequest = requestWith('ACME');
+    editorRequest.company = viewerRequest.company;
+    vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Editor');
+    await resolveDashboardReadAccess(editorRequest, reply);
+    expect(editorRequest.dashboardCanManage).toBe(true);
+
+    vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Editor');
+    await requireDashboardAdmin(editorRequest, reply);
+    expect(editorRequest.dashboardCanManage).toBe(true);
 
     const adminRequest = requestWith('ACME');
     adminRequest.company = viewerRequest.company;

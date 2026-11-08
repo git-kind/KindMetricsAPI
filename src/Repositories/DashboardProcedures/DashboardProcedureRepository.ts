@@ -37,8 +37,71 @@ function toProcedure(row: ProcedureRow): DashboardProcedureResponseDto {
 export class DashboardProcedureRepository {
   constructor(private readonly database = new CompanyDatabaseRepository()) {}
 
+  async syncNoParameterProcedure(company: CompanyContext, procedureName: string, actor: number) {
+    await this.database.queryRows<ProcedureRow>(
+      company,
+      `INSERT INTO dashboard_procedures(
+         guid, procedure_name, description, parameters_schema, result_schema, status,
+         execution_timeout_seconds, version, created_by
+       )
+       SELECT UUID(), ?, NULL,
+         JSON_OBJECT('schemaVersion', 1, 'parameters', JSON_ARRAY()),
+         JSON_OBJECT('schemaVersion', 1, 'columns', JSON_ARRAY()),
+         'ACTIVE', 30, 1, ?
+       WHERE EXISTS (
+         SELECT 1 FROM information_schema.ROUTINES
+         WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = ?
+           AND ROUTINE_TYPE = 'PROCEDURE'
+       )
+       AND NOT EXISTS (
+         SELECT 1 FROM information_schema.PARAMETERS
+         WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = ?
+       )
+       ON DUPLICATE KEY UPDATE
+         id = LAST_INSERT_ID(id),
+         version = version + IF(status <> 'ACTIVE', 1, 0),
+         updated_by = IF(status <> 'ACTIVE', ?, updated_by),
+         updated_at = IF(status <> 'ACTIVE', CURRENT_TIMESTAMP(3), updated_at),
+         parameters_schema = JSON_OBJECT('schemaVersion', 1, 'parameters', JSON_ARRAY()),
+         status = 'ACTIVE',
+         reviewed_by = NULL,
+         approval_reference = NULL`,
+      [procedureName, actor, procedureName, procedureName, actor],
+    );
+    const rows = await this.database.queryRows<ProcedureRow>(
+      company,
+      `SELECT id, guid, procedure_name, description, parameters_schema, result_schema, status,
+         execution_timeout_seconds, version, created_at, created_by, updated_at, updated_by,
+         reviewed_by, approval_reference
+       FROM dashboard_procedures
+       WHERE procedure_name = ? AND status = 'ACTIVE'
+         AND JSON_LENGTH(JSON_EXTRACT(parameters_schema, '$.parameters')) = 0
+         AND EXISTS (
+           SELECT 1 FROM information_schema.ROUTINES
+           WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = dashboard_procedures.procedure_name
+             AND ROUTINE_TYPE = 'PROCEDURE'
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM information_schema.PARAMETERS
+           WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = dashboard_procedures.procedure_name
+         )
+       LIMIT 1`,
+      [procedureName],
+    );
+    return rows[0] ? toProcedure(rows[0]) : undefined;
+  }
+
   async list(company: CompanyContext, includeInactive: boolean) {
-    const rows = await this.database.callRows<ProcedureRow>(company, 'sp_dashboard_procedure_list', [includeInactive ? 1 : 0]);
+    const rows = await this.database.queryRows<ProcedureRow>(
+      company,
+      `SELECT id, guid, procedure_name, description, parameters_schema, result_schema, status,
+         execution_timeout_seconds, version, created_at, created_by, updated_at, updated_by,
+         reviewed_by, approval_reference
+       FROM dashboard_procedures
+       WHERE ? = 1 OR status = 'ACTIVE'
+       ORDER BY procedure_name, id`,
+      [includeInactive ? 1 : 0],
+    );
     return rows.map(toProcedure);
   }
 
