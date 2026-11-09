@@ -11,7 +11,7 @@ const company: CompanyContext = {
 };
 
 describe('Dashboard procedures service', () => {
-  it('synchronizes existing parameter-free procedures regardless of SQL security mode', async () => {
+  it('synchronizes executable procedures with their discovered input parameters', async () => {
     const metadataRepository = {
       discoverProcedures: vi.fn().mockResolvedValue([
         {
@@ -24,7 +24,16 @@ describe('Dashboard procedures service', () => {
           procedureName: 'sp_dash_with_args',
           securityType: 'INVOKER',
           executable: true,
-          parameters: [{ name: 'p_id' }],
+          parameters: [
+            { name: 'p_tenant', type: 'STRING', mode: 'IN', ordinalPosition: 1 },
+            { name: 'p_date_from', type: 'DATETIME', mode: 'IN', ordinalPosition: 2 },
+          ],
+        },
+        {
+          procedureName: 'sp_dash_with_output',
+          securityType: 'INVOKER',
+          executable: false,
+          parameters: [{ name: 'p_result', type: 'STRING', mode: 'OUT', ordinalPosition: 1 }],
         },
         {
           procedureName: 'sp_dash_definer',
@@ -35,16 +44,44 @@ describe('Dashboard procedures service', () => {
       ]),
     } as unknown as DashboardMetadataRepository;
     const repository = {
-      syncNoParameterProcedure: vi.fn(),
+      syncDiscoveredProcedure: vi.fn(),
       list: vi.fn().mockResolvedValue([]),
     } as unknown as DashboardProcedureRepository;
     const service = new DashboardProceduresService(repository, metadataRepository);
 
     await service.list(company, 42);
 
-    expect(repository.syncNoParameterProcedure).toHaveBeenCalledTimes(2);
-    expect(repository.syncNoParameterProcedure).toHaveBeenCalledWith(company, 'sp_dash_no_args', 42);
-    expect(repository.syncNoParameterProcedure).toHaveBeenCalledWith(company, 'sp_dash_definer', 42);
+    expect(repository.syncDiscoveredProcedure).toHaveBeenCalledTimes(3);
+    expect(repository.syncDiscoveredProcedure).toHaveBeenCalledWith(
+      company,
+      'sp_dash_no_args',
+      {
+        schemaVersion: 1,
+        parameters: [],
+      },
+      42,
+    );
+    expect(repository.syncDiscoveredProcedure).toHaveBeenCalledWith(
+      company,
+      'sp_dash_with_args',
+      {
+        schemaVersion: 1,
+        parameters: [
+          { name: 'p_tenant', type: 'STRING', required: true },
+          { name: 'p_date_from', type: 'DATETIME', required: true },
+        ],
+      },
+      42,
+    );
+    expect(repository.syncDiscoveredProcedure).toHaveBeenCalledWith(
+      company,
+      'sp_dash_definer',
+      {
+        schemaVersion: 1,
+        parameters: [],
+      },
+      42,
+    );
     expect(repository.list).toHaveBeenCalledWith(company, true);
   });
 });

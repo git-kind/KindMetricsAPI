@@ -37,15 +37,20 @@ function toProcedure(row: ProcedureRow): DashboardProcedureResponseDto {
 export class DashboardProcedureRepository {
   constructor(private readonly database = new CompanyDatabaseRepository()) {}
 
-  async syncNoParameterProcedure(company: CompanyContext, procedureName: string, actor: number) {
+  async syncDiscoveredProcedure(
+    company: CompanyContext,
+    procedureName: string,
+    parametersSchema: { schemaVersion: 1; parameters: Array<{ name: string; type: string; required: boolean }> },
+    actor: number,
+  ) {
+    const serializedParameters = JSON.stringify(parametersSchema);
     await this.database.queryRows<ProcedureRow>(
       company,
       `INSERT INTO dashboard_procedures(
          guid, procedure_name, description, parameters_schema, result_schema, status,
          execution_timeout_seconds, version, created_by
        )
-       SELECT UUID(), ?, NULL,
-         JSON_OBJECT('schemaVersion', 1, 'parameters', JSON_ARRAY()),
+       SELECT UUID(), ?, NULL, ?,
          JSON_OBJECT('schemaVersion', 1, 'columns', JSON_ARRAY()),
          'ACTIVE', 30, 1, ?
        WHERE EXISTS (
@@ -53,20 +58,60 @@ export class DashboardProcedureRepository {
          WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = ?
            AND ROUTINE_TYPE = 'PROCEDURE'
        )
+       AND (
+         SELECT COUNT(*) FROM information_schema.PARAMETERS
+         WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = ?
+       ) = JSON_LENGTH(JSON_EXTRACT(?, '$.parameters'))
+       AND (
+         SELECT COUNT(*) FROM information_schema.PARAMETERS
+         WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = ? AND PARAMETER_MODE = 'IN'
+       ) = JSON_LENGTH(JSON_EXTRACT(?, '$.parameters'))
+       AND NOT EXISTS (
+         SELECT 1
+         FROM JSON_TABLE(?, '$.parameters[*]' COLUMNS(
+           ordinal FOR ORDINALITY,
+           parameter_name VARCHAR(64) PATH '$.name',
+           parameter_type VARCHAR(20) PATH '$.type'
+         )) expected
+         LEFT JOIN information_schema.PARAMETERS actual
+           ON actual.SPECIFIC_SCHEMA = DATABASE()
+           AND actual.SPECIFIC_NAME = ?
+           AND actual.ORDINAL_POSITION = expected.ordinal
+         WHERE actual.PARAMETER_NAME IS NULL OR expected.parameter_name <> actual.PARAMETER_NAME
+           OR (expected.parameter_type = 'STRING' AND actual.DATA_TYPE NOT IN ('char','varchar','tinytext','text','mediumtext','longtext'))
+           OR (expected.parameter_type = 'NUMBER' AND actual.DATA_TYPE NOT IN ('decimal','float','double'))
+           OR (expected.parameter_type = 'INTEGER' AND actual.DATA_TYPE NOT IN ('tinyint','smallint','mediumint','int','bigint'))
+           OR (expected.parameter_type = 'BOOLEAN' AND actual.DATA_TYPE NOT IN ('tinyint','bit','boolean'))
+           OR (expected.parameter_type = 'DATE' AND actual.DATA_TYPE <> 'date')
+           OR (expected.parameter_type = 'DATETIME' AND actual.DATA_TYPE NOT IN ('datetime','timestamp'))
+       )
        AND NOT EXISTS (
          SELECT 1 FROM information_schema.PARAMETERS
-         WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = ?
+         WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = ? AND PARAMETER_MODE <> 'IN'
        )
        ON DUPLICATE KEY UPDATE
          id = LAST_INSERT_ID(id),
-         version = version + IF(status <> 'ACTIVE', 1, 0),
-         updated_by = IF(status <> 'ACTIVE', ?, updated_by),
-         updated_at = IF(status <> 'ACTIVE', CURRENT_TIMESTAMP(3), updated_at),
-         parameters_schema = JSON_OBJECT('schemaVersion', 1, 'parameters', JSON_ARRAY()),
+         version = version + IF(status <> 'ACTIVE' OR parameters_schema <> VALUES(parameters_schema), 1, 0),
+         updated_by = IF(status <> 'ACTIVE' OR parameters_schema <> VALUES(parameters_schema), ?, updated_by),
+         updated_at = IF(status <> 'ACTIVE' OR parameters_schema <> VALUES(parameters_schema), CURRENT_TIMESTAMP(3), updated_at),
+         parameters_schema = VALUES(parameters_schema),
          status = 'ACTIVE',
          reviewed_by = NULL,
          approval_reference = NULL`,
-      [procedureName, actor, procedureName, procedureName, actor],
+      [
+        procedureName,
+        serializedParameters,
+        actor,
+        procedureName,
+        procedureName,
+        serializedParameters,
+        procedureName,
+        serializedParameters,
+        serializedParameters,
+        procedureName,
+        procedureName,
+        actor,
+      ],
     );
     const rows = await this.database.queryRows<ProcedureRow>(
       company,
@@ -75,18 +120,14 @@ export class DashboardProcedureRepository {
          reviewed_by, approval_reference
        FROM dashboard_procedures
        WHERE procedure_name = ? AND status = 'ACTIVE'
-         AND JSON_LENGTH(JSON_EXTRACT(parameters_schema, '$.parameters')) = 0
+         AND JSON_EXTRACT(parameters_schema, '$') = JSON_EXTRACT(?, '$')
          AND EXISTS (
            SELECT 1 FROM information_schema.ROUTINES
            WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = dashboard_procedures.procedure_name
              AND ROUTINE_TYPE = 'PROCEDURE'
          )
-         AND NOT EXISTS (
-           SELECT 1 FROM information_schema.PARAMETERS
-           WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = dashboard_procedures.procedure_name
-         )
        LIMIT 1`,
-      [procedureName],
+      [procedureName, serializedParameters],
     );
     return rows[0] ? toProcedure(rows[0]) : undefined;
   }

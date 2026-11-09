@@ -24,11 +24,9 @@ describe('CompanyDatabaseInitializer', () => {
     process.env.DB_COMPANY_HOST = 'db.example.test';
     process.env.DB_COMPANY_PORT = '3307';
     process.env.DB_COMPANY_SSL = 'true';
-    queryMock.mockImplementation((sql: string) => (
-      sql === 'SELECT DATABASE() AS database_name'
-        ? Promise.resolve([[{ database_name: 'tenant_db' }], []])
-        : Promise.resolve([[], []])
-    ));
+    queryMock.mockImplementation((sql: string) =>
+      sql === 'SELECT DATABASE() AS database_name' ? Promise.resolve([[{ database_name: 'tenant_db' }], []]) : Promise.resolve([[], []]),
+    );
     endMock.mockResolvedValue(undefined);
     createConnectionMock.mockResolvedValue({ query: queryMock, end: endMock });
   });
@@ -43,23 +41,21 @@ describe('CompanyDatabaseInitializer', () => {
   });
 
   it('splits procedure definitions using the script DELIMITER directives', () => {
-    const statements = splitSqlStatements([
-      'CREATE TABLE sample (id INT);',
-      'DELIMITER $$',
-      'CREATE PROCEDURE sp_sample()',
-      'BEGIN',
-      '  SELECT 1;',
-      '  SELECT 2;',
-      'END$$',
-      'DELIMITER ;',
-      'SELECT 3;',
-    ].join('\n'));
+    const statements = splitSqlStatements(
+      [
+        'CREATE TABLE sample (id INT);',
+        'DELIMITER $$',
+        'CREATE PROCEDURE sp_sample()',
+        'BEGIN',
+        '  SELECT 1;',
+        '  SELECT 2;',
+        'END$$',
+        'DELIMITER ;',
+        'SELECT 3;',
+      ].join('\n'),
+    );
 
-    expect(statements).toEqual([
-      'CREATE TABLE sample (id INT)',
-      'CREATE PROCEDURE sp_sample()\nBEGIN\n  SELECT 1;\n  SELECT 2;\nEND',
-      'SELECT 3',
-    ]);
+    expect(statements).toEqual(['CREATE TABLE sample (id INT)', 'CREATE PROCEDURE sp_sample()\nBEGIN\n  SELECT 1;\n  SELECT 2;\nEND', 'SELECT 3']);
   });
 
   it('runs dashboard, tab, panel, and procedure migrations on the tenant connection', async () => {
@@ -94,27 +90,21 @@ describe('CompanyDatabaseInitializer', () => {
       'CREATE PROCEDURE sp_dashboard_procedure_result_schema_sync',
       'CREATE PROCEDURE sp_dashboard_procedure_create',
     ];
-    const statementIndexes = expectedMigrationStatements.map((expected) =>
-      statements.findIndex((statement) => statement.includes(expected)),
-    );
+    const statementIndexes = expectedMigrationStatements.map((expected) => statements.findIndex((statement) => statement.includes(expected)));
     expect(statementIndexes.every((index) => index >= 0)).toBe(true);
     expect(statementIndexes).toEqual([...statementIndexes].sort((a, b) => a - b));
-    const procedureCreate = statements.find((statement) =>
-      statement.includes('CREATE PROCEDURE sp_dashboard_procedure_create'),
-    );
-    const procedureUpdate = statements.find((statement) =>
-      statement.includes('CREATE PROCEDURE sp_dashboard_procedure_update'),
-    );
-    expect(procedureCreate).toContain("^sp_dash_[A-Za-z0-9_]{1,112}$");
+    const procedureCreate = statements.find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_procedure_create'));
+    const procedureUpdate = statements.find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_procedure_update'));
+    const panelCreate = [...statements].reverse().find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_panel_create'));
+    expect(procedureCreate).toContain('^sp_dash_[A-Za-z0-9_]{1,112}$');
     expect(procedureCreate).toContain("'ACTIVE'");
     expect(procedureCreate).not.toContain("SECURITY_TYPE = 'INVOKER'");
-    expect(procedureUpdate).toContain("^sp_dash_[A-Za-z0-9_]{1,112}$");
+    expect(procedureUpdate).toContain('^sp_dash_[A-Za-z0-9_]{1,112}$');
     expect(procedureUpdate).not.toContain("SECURITY_TYPE = 'INVOKER'");
-    const procedureSync = statements.find((statement) =>
-      statement.includes('CREATE PROCEDURE sp_dashboard_procedure_sync_no_parameter'),
-    );
+    const procedureSync = statements.find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_procedure_sync_no_parameter'));
     expect(procedureSync).not.toContain("SECURITY_TYPE = 'INVOKER'");
     expect(procedureUpdate).not.toContain('DASHBOARD_PROCEDURE_REVIEW_REQUIRED');
+    expect(panelCreate).toContain("'PANEL'");
     expect(endMock).toHaveBeenCalledOnce();
   });
 
@@ -122,11 +112,13 @@ describe('CompanyDatabaseInitializer', () => {
     queryMock.mockResolvedValueOnce([[{ database_name: 'another_db' }], []]);
     const initializer = new CompanyDatabaseInitializer();
 
-    await expect(initializer.initialize({
-      database: 'tenant_db',
-      username: 'tenant_user',
-      password: 'tenant-password',
-    })).rejects.toMatchObject({
+    await expect(
+      initializer.initialize({
+        database: 'tenant_db',
+        username: 'tenant_user',
+        password: 'tenant-password',
+      }),
+    ).rejects.toMatchObject({
       code: 'COMPANY_DATABASE_INITIALIZATION_FAILED',
     });
     expect(queryMock).toHaveBeenCalledOnce();

@@ -46,6 +46,63 @@ describe('Dashboard DTOs', () => {
     expect(createDashboardSchema.safeParse({ name: 'Overview', time_from: 'now-1h' }).success).toBe(false);
   });
 
+  it('accepts the frontend PANEL payload with procedure parameters and display presets', () => {
+    const payload = {
+      title: 'Llamadas en Teams',
+      description: null,
+      panelType: 'PANEL',
+      dashboardProcedureGuid: '433b093b-dbd9-11f1-a1c1-cac863731861',
+      procedureParams: {
+        schemaVersion: 1,
+        parameters: [
+          { name: 'p_tenant', type: 'STRING', source: 'STATIC', value: 'All', required: true },
+          { name: 'p_date_from', type: 'DATETIME', source: 'DASHBOARD_FILTER', required: true, filter: 'dateFrom' },
+          { name: 'p_date_to', type: 'DATETIME', source: 'DASHBOARD_FILTER', required: true, filter: 'dateTo' },
+        ],
+      },
+      executionTimeoutSeconds: 30,
+      gridX: 0,
+      gridY: 0,
+      gridW: 6,
+      gridH: 3,
+      minW: 2,
+      minH: 2,
+      sortOrder: 0,
+      isVisible: true,
+      isResizable: true,
+      isDraggable: true,
+      visualizationConfig: {
+        schemaVersion: 1,
+        properties: {
+          columns: 2,
+          rows: 1,
+          cells: [
+            { id: 'cell-1', title: 'Metric 1', source: 'FIELD', field: 'Total Calls', format: 'number', decimals: 0, conditions: [] },
+            { id: 'cell-2', title: 'Metric 2', source: 'FIELD', field: 'PSTN', format: 'number', decimals: 0, conditions: [] },
+          ],
+        },
+      },
+      displayConfig: {
+        schemaVersion: 1,
+        properties: {
+          visualizationPresets: {
+            LINE: { xField: '', yFields: [], legend: false },
+            PANEL: {
+              columns: 2,
+              rows: 1,
+              cells: [
+                { id: 'cell-1', title: 'Metric 1', source: 'FIELD', field: 'Total Calls', format: 'number', decimals: 0, conditions: [] },
+                { id: 'cell-2', title: 'Metric 2', source: 'FIELD', field: 'PSTN', format: 'number', decimals: 0, conditions: [] },
+              ],
+            },
+          },
+        },
+      },
+    };
+
+    expect(createDashboardPanelSchema.safeParse(payload).success).toBe(true);
+  });
+
   it('defaults and validates Dashboard refresh settings', () => {
     expect(createDashboardSchema.parse({ name: 'Overview' })).toMatchObject({ refreshEnabled: false, refreshIntervalSeconds: 30 });
     expect(createDashboardSchema.safeParse({ name: 'Overview', refreshIntervalSeconds: 9 }).success).toBe(false);

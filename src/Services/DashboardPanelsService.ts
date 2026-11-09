@@ -42,24 +42,41 @@ export class DashboardPanelsService {
     const schema = procedure.parametersSchema as { parameters?: Array<{ name: string; type: string; required: boolean }> };
     const mapping = procedureParams as { parameters?: Array<{ name: string; type: string; required: boolean }> } | null;
     const configured = mapping?.parameters ?? [];
-    if ((schema.parameters?.length ?? 0) > 0 || configured.length > 0) {
-      throw new AppError('Por ahora solo se permiten procedimientos sin parámetros.', {
-        statusCode: 400,
-        code: 'DASHBOARD_PROCEDURE_PARAMETERS_UNSUPPORTED',
-      });
+    const expected = schema.parameters;
+    const configuredByName = new Map(configured.map((parameter) => [parameter.name, parameter]));
+    const expectedNames = new Set((expected ?? []).map((parameter) => parameter.name));
+    const issues: string[] = [];
+
+    if (!mapping) {
+      issues.push('Falta procedureParams.');
+    } else if (!Array.isArray(expected)) {
+      issues.push('El procedimiento autorizado no tiene un contrato de parámetros válido.');
+    } else {
+      for (const parameter of expected) {
+        const mapped = configuredByName.get(parameter.name);
+        if (!mapped) {
+          issues.push(`Falta ${parameter.name}.`);
+          continue;
+        }
+        if (mapped.type !== parameter.type) {
+          issues.push(`${parameter.name} debe tener type ${parameter.type}.`);
+        }
+        if (parameter.required && !mapped.required) {
+          issues.push(`${parameter.name} debe tener required=true.`);
+        }
+      }
+      for (const parameter of configured) {
+        if (!expectedNames.has(parameter.name)) {
+          issues.push(`${parameter.name} no existe en la firma autorizada.`);
+        }
+      }
     }
-    if (
-      !mapping ||
-      !Array.isArray(schema.parameters) ||
-      configured.length !== schema.parameters.length ||
-      schema.parameters.some((parameter) => {
-        const mapped = configured.find((entry) => entry.name === parameter.name);
-        return !mapped || mapped.type !== parameter.type || (parameter.required && !mapped.required);
-      })
-    ) {
-      throw new AppError('Los parámetros configurados no coinciden con el contrato del procedimiento autorizado.', {
+
+    if (issues.length > 0) {
+      throw new AppError(`El mapeo de parámetros del Panel no coincide con el contrato autorizado: ${issues.join(' ')}`, {
         statusCode: 400,
         code: 'DASHBOARD_PANEL_PARAMETER_CONTRACT_MISMATCH',
+        field: 'procedureParams.parameters',
       });
     }
   }

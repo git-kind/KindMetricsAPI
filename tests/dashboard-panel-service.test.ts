@@ -22,14 +22,18 @@ const parameterMapping = {
 const visualizationConfig = { schemaVersion: 1 as const, properties: { valueField: 'total_calls' } };
 
 describe('Dashboard Panel Service', () => {
-  it('rejects procedures with parameters for now', async () => {
-    const panelsRepository = { create: vi.fn() } as unknown as DashboardPanelsRepository;
+  it('creates a Panel with matching procedure parameter mappings', async () => {
+    const panelsRepository = { create: vi.fn().mockResolvedValue({ guid: panelGuid }) } as unknown as DashboardPanelsRepository;
     const proceduresRepository = {
       get: vi.fn().mockResolvedValue({
         status: 'ACTIVE',
         parametersSchema: {
           schemaVersion: 1,
-          parameters: [{ name: 'p_service_id', type: 'STRING', required: true }],
+          parameters: [
+            { name: 'p_tenant', type: 'STRING', required: true },
+            { name: 'p_date_from', type: 'DATETIME', required: true },
+            { name: 'p_date_to', type: 'DATETIME', required: true },
+          ],
         },
       }),
     } as unknown as DashboardProcedureRepository;
@@ -40,7 +44,42 @@ describe('Dashboard Panel Service', () => {
       dashboardProcedureGuid: procedureGuid,
       procedureParams: {
         schemaVersion: 1,
-        parameters: [{ name: 'p_other', type: 'STRING', source: 'DASHBOARD_FILTER', filter: 'serviceId', required: true }],
+        parameters: [
+          { name: 'p_tenant', type: 'STRING', source: 'STATIC', value: 'All', required: true },
+          { name: 'p_date_from', type: 'DATETIME', source: 'DASHBOARD_FILTER', filter: 'dateFrom', required: true },
+          { name: 'p_date_to', type: 'DATETIME', source: 'DASHBOARD_FILTER', filter: 'dateTo', required: true },
+        ],
+      },
+      visualizationConfig: { schemaVersion: 1, properties: { valueField: 'Total Calls' } },
+      gridX: 0,
+      gridY: 0,
+      gridW: 6,
+      gridH: 4,
+    });
+
+    await expect(service.create(company, dashboardGuid, tabGuid, input, 11)).resolves.toEqual({ guid: panelGuid });
+    expect(panelsRepository.create).toHaveBeenCalledWith(company, dashboardGuid, tabGuid, input, 11);
+  });
+
+  it('rejects Panel mappings that do not match the stored procedure contract', async () => {
+    const panelsRepository = { create: vi.fn() } as unknown as DashboardPanelsRepository;
+    const proceduresRepository = {
+      get: vi.fn().mockResolvedValue({
+        status: 'ACTIVE',
+        parametersSchema: {
+          schemaVersion: 1,
+          parameters: [{ name: 'p_tenant', type: 'STRING', required: true }],
+        },
+      }),
+    } as unknown as DashboardProcedureRepository;
+    const service = new DashboardPanelsService(panelsRepository, proceduresRepository);
+    const input = createDashboardPanelSchema.parse({
+      title: 'Calls',
+      panelType: 'NUMBER',
+      dashboardProcedureGuid: procedureGuid,
+      procedureParams: {
+        schemaVersion: 1,
+        parameters: [{ name: 'p_wrong', type: 'STRING', source: 'STATIC', value: 'All', required: true }],
       },
       visualizationConfig,
       gridX: 0,
@@ -49,9 +88,14 @@ describe('Dashboard Panel Service', () => {
       gridH: 4,
     });
 
-    await expect(service.create(company, dashboardGuid, tabGuid, input, 11)).rejects.toMatchObject({
-      code: 'DASHBOARD_PROCEDURE_PARAMETERS_UNSUPPORTED',
+    const result = service.create(company, dashboardGuid, tabGuid, input, 11);
+    await expect(result).rejects.toMatchObject({
+      code: 'DASHBOARD_PANEL_PARAMETER_CONTRACT_MISMATCH',
+      statusCode: 400,
+      field: 'procedureParams.parameters',
     });
+    await expect(result).rejects.toThrow('p_tenant');
+    await expect(result).rejects.toThrow('p_wrong');
     expect(panelsRepository.create).not.toHaveBeenCalled();
   });
 

@@ -1,9 +1,6 @@
 import { AppError } from '../Errors/AppError.js';
 import type { CompanyContext } from '../Models/Common.js';
-import type {
-  CreateDashboardProcedureDto,
-  UpdateDashboardProcedureDto,
-} from '../Models/DashboardProcedures/DashboardProcedureDto.js';
+import type { CreateDashboardProcedureDto, UpdateDashboardProcedureDto } from '../Models/DashboardProcedures/DashboardProcedureDto.js';
 import { DashboardMetadataRepository } from '../Repositories/DashboardMetadataRepository.js';
 import { DashboardProcedureRepository } from '../Repositories/DashboardProcedures/DashboardProcedureRepository.js';
 
@@ -32,11 +29,20 @@ export class DashboardProceduresService {
     try {
       const discovered = await this.metadataRepository.discoverProcedures(company);
       for (const procedure of discovered) {
-        if (
-          procedure.parameters.length === 0 &&
-          /^sp_dash_[a-zA-Z0-9_]{1,112}$/.test(procedure.procedureName)
-        ) {
-          await this.repository.syncNoParameterProcedure(company, procedure.procedureName, actor);
+        if (procedure.executable && /^sp_dash_[a-zA-Z0-9_]{1,112}$/.test(procedure.procedureName)) {
+          await this.repository.syncDiscoveredProcedure(
+            company,
+            procedure.procedureName,
+            {
+              schemaVersion: 1,
+              parameters: procedure.parameters.map((parameter) => ({
+                name: parameter.name,
+                type: parameter.type,
+                required: true,
+              })),
+            },
+            actor,
+          );
         }
       }
       return await this.repository.list(company, true);
