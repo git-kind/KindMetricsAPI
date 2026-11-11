@@ -48,7 +48,7 @@ BEGIN
      OR JSON_TYPE(JSON_EXTRACT(p_payload, '$.title')) <> 'STRING'
      OR CHAR_LENGTH(TRIM(JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.title')))) = 0
      OR CHAR_LENGTH(JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.title'))) > 200
-     OR JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.panelType')) NOT IN ('NUMBER','TABLE','LINE','BAR','PIE','GAUGE','HEATMAP','MAP','TEXT','STAT','PANEL')
+     OR JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.panelType')) NOT IN ('NUMBER','TABLE','LINE','BAR','PIE','GAUGE','HEATMAP','MAP','TEXT','STAT','PANEL','GAUGE_GRID')
      OR (JSON_CONTAINS_PATH(p_payload, 'one', '$.visualizationConfig') AND JSON_TYPE(JSON_EXTRACT(p_payload, '$.visualizationConfig')) NOT IN ('OBJECT','NULL'))
      OR (JSON_CONTAINS_PATH(p_payload, 'one', '$.queryConfig') AND JSON_TYPE(JSON_EXTRACT(p_payload, '$.queryConfig')) NOT IN ('OBJECT','NULL'))
      OR (JSON_CONTAINS_PATH(p_payload, 'one', '$.displayConfig') AND JSON_TYPE(JSON_EXTRACT(p_payload, '$.displayConfig')) NOT IN ('OBJECT','NULL'))

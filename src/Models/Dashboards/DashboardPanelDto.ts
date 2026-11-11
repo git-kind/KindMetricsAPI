@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const guid = z.string().uuid();
 const expectedVersion = z.number().int().positive().max(4_294_967_295).safe();
-const panelTypes = ['NUMBER', 'TABLE', 'LINE', 'BAR', 'PIE', 'GAUGE', 'HEATMAP', 'MAP', 'TEXT', 'STAT', 'PANEL'] as const;
+const panelTypes = ['NUMBER', 'TABLE', 'LINE', 'BAR', 'PIE', 'GAUGE', 'HEATMAP', 'MAP', 'TEXT', 'STAT', 'PANEL', 'GAUGE_GRID'] as const;
 const secretKey = /password|passwd|secret|token|credential|private.?key|api.?key/i;
 
 function validConfig(value: unknown): boolean {
@@ -109,6 +109,31 @@ const panelGridCellSchema = z.discriminatedUnion('source', [
     conditions: z.array(panelGridConditionSchema).max(8).optional(),
   }).strict(),
 ]);
+const gaugeGridGaugeSchema = z.discriminatedUnion('source', [
+  z.object({
+    id: z.string().min(1).max(64),
+    title: z.string().max(100),
+    source: z.literal('FIELD'),
+    field: fieldName,
+    format: z.enum(['number', 'percent', 'duration']).default('number'),
+    decimals: z.number().int().min(0).max(6).optional(),
+    unit: z.string().max(32).optional(),
+    defaultColor: color.optional(),
+    thresholds: z.array(thresholdSchema).max(32).optional(),
+  }).strict(),
+  z.object({
+    id: z.string().min(1).max(64),
+    title: z.string().max(100),
+    source: z.literal('FORMULA'),
+    formula: z.string().trim().min(1).max(512),
+    format: z.enum(['number', 'percent', 'duration']).default('number'),
+    decimals: z.number().int().min(0).max(6).optional(),
+    unit: z.string().max(32).optional(),
+    defaultColor: color.optional(),
+    thresholds: z.array(thresholdSchema).max(32).optional(),
+  }).strict(),
+]);
+
 const visualizationPropertiesSchemas = {
   NUMBER: z.object({
     valueField: fieldName,
@@ -162,6 +187,11 @@ const visualizationPropertiesSchemas = {
     showPercentages: z.boolean().optional(),
     colors: z.array(color).max(64).optional(),
   }).strict(),
+
+
+
+
+
   GAUGE: z.object({
     valueField: fieldName,
     minimum: z.number().finite().optional(),
@@ -182,6 +212,20 @@ const visualizationPropertiesSchemas = {
     valueField: fieldName.optional(),
     marker: z.object({ color: color.optional(), size: z.number().int().min(1).max(64).optional(), cluster: z.boolean().optional() }).strict().optional(),
   }).strict(),
+  GAUGE_GRID: z.object({
+    columns: z.number().int().min(1).max(12),
+    rows: z.number().int().min(1).max(8),
+    design: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/).optional(),
+    minimum: z.number().finite().optional(),
+    maximum: z.number().finite().optional(),
+    unit: z.string().max(40).optional(),
+    defaultColor: color.optional(),
+    gauges: z.array(gaugeGridGaugeSchema).min(1).max(48),
+  }).strict().refine((properties) =>
+    properties.gauges.length === properties.columns * properties.rows &&
+    new Set(properties.gauges.map((gauge) => gauge.id)).size === properties.gauges.length &&
+    (properties.minimum === undefined || properties.maximum === undefined || properties.minimum < properties.maximum),
+  ),
   TEXT: z.object({ content: z.string().max(20_000).refine((value) => !/[<>]/.test(value)), format: z.literal('plain').default('plain') }).strict(),
   PANEL: z.object({
     columns: z.number().int().min(1).max(12),
