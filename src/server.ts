@@ -4,6 +4,7 @@ const environment = process.env.NODE_ENV ?? 'dev';
 if (!['dev', 'qa', 'prod'].includes(environment)) {
   throw new Error('NODE_ENV must be one of: dev, qa, prod');
 }
+process.env.NODE_ENV ??= environment;
 
 const envFiles = {
   dev: '.env.dev',
@@ -24,10 +25,39 @@ const urlHost = ['0.0.0.0', '::'].includes(host) ? 'localhost' : host;
 const urlHostFormatted = urlHost.includes(':') ? `[${urlHost}]` : urlHost;
 const baseUrl = `http://${urlHostFormatted}:${port}`;
 const app = await buildApp();
+
+async function isKindMetricsAlreadyRunning(): Promise<boolean> {
+  try {
+    const response = await fetch(`${baseUrl}/health`, {
+      signal: AbortSignal.timeout(3_000),
+    });
+    if (!response.ok) return false;
+    const body: unknown = await response.json();
+    return (
+      typeof body === 'object' &&
+      body !== null &&
+      'success' in body &&
+      body.success === true &&
+      'data' in body &&
+      typeof body.data === 'object' &&
+      body.data !== null &&
+      'status' in body.data &&
+      body.data.status === 'ok'
+    );
+  } catch {
+    return false;
+  }
+}
+
 try {
   await app.listen({ port, host });
 } catch (error) {
   if (error instanceof Error && 'code' in error && error.code === 'EADDRINUSE') {
+    if (await isKindMetricsAlreadyRunning()) {
+      await app.close();
+      console.info(`KindMetrics API is already running at ${baseUrl}; keeping the existing instance.`);
+      process.exit(0);
+    }
     console.error(`Cannot start API: ${host}:${port} is already in use. Stop the existing instance or choose another PORT.`);
   } else {
     const message = error instanceof Error ? error.message : String(error);

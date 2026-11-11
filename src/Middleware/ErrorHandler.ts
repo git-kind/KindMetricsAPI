@@ -65,8 +65,8 @@ export function handleApiError(error: unknown, request: FastifyRequest, reply: F
   if (error instanceof AppError) {
     if (error.cause) {
       request.log.error(
-        { code: error.code, databaseError: safeErrorMetadata(error.cause) },
-        'Company database initialization failed',
+        { code: error.code, causeMetadata: safeErrorMetadata(error.cause) },
+        'Application operation failed',
       );
     }
     reply.code(error.statusCode).send(

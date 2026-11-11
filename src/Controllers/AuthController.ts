@@ -1,11 +1,21 @@
 import type { FastifyInstance } from 'fastify';
 import { loginRequestSchema, type LoginRequestDto } from '../Models/Auth/LoginRequestDto.js';
+import {
+  passwordRecoveryRequestSchema,
+  passwordRecoveryUpdateSchema,
+  passwordRecoveryValidateSchema,
+  type PasswordRecoveryRequestDto,
+  type PasswordRecoveryUpdateDto,
+  type PasswordRecoveryValidateDto,
+} from '../Models/Auth/PasswordRecoveryDto.js';
 import type { LoginResponseDto } from '../Models/Auth/LoginResponseDto.js';
 import type { CurrentUserResponseDto } from '../Models/Auth/CurrentUserResponseDto.js';
 import { AuthService } from '../Services/AuthService.js';
 import { authenticate } from '../Middleware/Security.js';
 import { buildErrorResponse, buildSuccessResponse, createError } from '../Helpers/ResponseHelper.js';
+
 const service = new AuthService();
+
 export async function authRoutes(app: FastifyInstance) {
   app.post('/auth/logout', { schema: { tags: ['Auth'] } }, async (request, reply) => {
     reply.clearCookie('refreshToken', {
@@ -46,6 +56,62 @@ export async function authRoutes(app: FastifyInstance) {
     };
     return reply.code(200).send(buildSuccessResponse(payload, request.id, 'Inicio de sesión exitoso.'));
   });
+
+  app.post('/auth/password-recovery/request', { schema: { tags: ['Auth'], body: passwordRecoveryRequestSchema } }, async (request, reply) => {
+    const parsed = passwordRecoveryRequestSchema.safeParse(request.body as PasswordRecoveryRequestDto);
+    if (!parsed.success) {
+      const issues = parsed.error.issues.map((issue) => createError('VALIDATION_ERROR', issue.message, issue.path.join('.')));
+      return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues, request.id));
+    }
+
+    const result = await service.requestPasswordRecovery(parsed.data.email);
+    return reply.code(200).send(
+      buildSuccessResponse(
+        {
+          sent: result.sent,
+          email: result.email,
+          expiresInMinutes: result.expiresInMinutes,
+        },
+        request.id,
+        result.message,
+      ),
+    );
+  });
+
+  app.post('/auth/password-recovery/validate', { schema: { tags: ['Auth'], body: passwordRecoveryValidateSchema } }, async (request, reply) => {
+    const parsed = passwordRecoveryValidateSchema.safeParse(request.body as PasswordRecoveryValidateDto);
+    if (!parsed.success) {
+      const issues = parsed.error.issues.map((issue) => createError('VALIDATION_ERROR', issue.message, issue.path.join('.')));
+      return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues, request.id));
+    }
+
+    const result = await service.validatePasswordRecoveryToken(parsed.data.email, parsed.data.otp);
+    if (!result) {
+      return reply
+        .code(401)
+        .send(buildErrorResponse('Código inválido o vencido.', [createError('OTP_EXPIRED', 'El código OTP no es válido o ya venció.')], request.id));
+    }
+
+    return reply.code(200).send(buildSuccessResponse({ valid: true, expiresAt: result.expiresAt }, request.id, 'El código OTP es válido.'));
+  });
+
+  app.post('/auth/password-recovery/update', { schema: { tags: ['Auth'], body: passwordRecoveryUpdateSchema } }, async (request, reply) => {
+    const parsed = passwordRecoveryUpdateSchema.safeParse(request.body as PasswordRecoveryUpdateDto);
+    if (!parsed.success) {
+      const issues = parsed.error.issues.map((issue) => createError('VALIDATION_ERROR', issue.message, issue.path.join('.')));
+      return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues, request.id));
+    }
+
+    const updated = await service.updatePasswordWithRecovery(parsed.data.email, parsed.data.otp, parsed.data.password);
+    if (!updated) {
+      return reply
+        .code(401)
+        .send(buildErrorResponse('No se pudo actualizar la contraseña.', [createError('PASSWORD_RESET_FAILED', 'El OTP es inválido, vencido o ya fue usado.')], request.id));
+    }
+
+    return reply.code(200).send(buildSuccessResponse({ updated: true }, request.id, 'La contraseña fue actualizada correctamente.'));
+  });
+
   app.post('/auth/refresh', { schema: { tags: ['Auth'] } }, async (request, reply) => {
     const refreshToken = request.cookies.refreshToken;
     if (!refreshToken) {
@@ -106,6 +172,7 @@ export async function authRoutes(app: FastifyInstance) {
       ),
     );
   });
+
   app.get('/auth/me', { preHandler: [authenticate], schema: { tags: ['Auth'], security: [{ bearerAuth: [] }] } }, async (request, reply) => {
     const user = await service.me(request.principal!.sub);
     if (!user) {

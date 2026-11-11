@@ -45,6 +45,14 @@ export function procedureColumnsFromFields(
     }));
 }
 
+export function procedureResultSets<T>(result: unknown): T[][] {
+  if (!Array.isArray(result)) {
+    return [];
+  }
+
+  return result.filter(Array.isArray) as T[][];
+}
+
 export async function callStoredProcedure<T>(
   executor: SqlExecutor,
   procedure: string,
@@ -62,7 +70,7 @@ export async function callStoredProcedure<T>(
     },
     [...args],
   );
-  return result.filter(Array.isArray) as T[][];
+  return procedureResultSets<T>(result);
 }
 
 export async function executeReadOnlyQuery(

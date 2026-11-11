@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { FieldPacket } from 'mysql2/promise';
-import { procedureColumnsFromFields } from '../src/Database/SqlExecutor.js';
+import { procedureColumnsFromFields, procedureResultSets } from '../src/Database/SqlExecutor.js';
 
 describe('Stored Procedure result metadata', () => {
   it('maps MySQL field packets to dashboard result columns', () => {
@@ -30,5 +30,15 @@ describe('Stored Procedure result metadata', () => {
     expect(procedureColumnsFromFields(fields)).toEqual([
       { name: 'total_calls', type: 'INTEGER' },
     ]);
+  });
+
+  it('returns no row sets when a write procedure only returns a result header', () => {
+    expect(procedureResultSets({ affectedRows: 1 })).toEqual([]);
+  });
+
+  it('keeps row sets and filters non-row procedure results', () => {
+    const rows = [{ id: 1, email: 'user@example.com' }];
+
+    expect(procedureResultSets([rows, { affectedRows: 0 }])).toEqual([rows]);
   });
 });

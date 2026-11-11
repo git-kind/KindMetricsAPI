@@ -2,6 +2,7 @@ export class AppError extends Error {
   public readonly statusCode: number;
   public readonly code: string;
   public readonly field?: string;
+  public readonly cause?: unknown;
 
   constructor(
     message: string,
@@ -12,5 +13,6 @@ export class AppError extends Error {
     this.statusCode = options.statusCode ?? 500;
     this.code = options.code ?? 'INTERNAL_ERROR';
     this.field = options.field;
+    this.cause = options.cause;
   }
 }

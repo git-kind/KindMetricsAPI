@@ -68,6 +68,54 @@ El patrón de registro vigente está en `src/Routes/ApiRoutes.ts`; los CRUD comp
 10. `npm run dev`; Swagger: `http://localhost:3001/docs`. En desarrollo, CORS admite frontends servidos desde `localhost`, `127.0.0.1` o `::1` en cualquier puerto; en QA/producción configura `CORS_ORIGIN` con los orígenes permitidos separados por comas. El servidor HTTP permanece disponible aunque MySQL no responda; las rutas que usan la base de datos devolverán `503 DATABASE_UNAVAILABLE` hasta restablecer la conexión. `/health` comprueba que la API responde, no la disponibilidad de MySQL.
 11. `npm run check` para lint, TypeScript y pruebas.
 
+### Recuperación de contraseña
+
+En una base existente que ya contiene la tabla `users`, aplicar la migración
+`DataBaseScripts/0012-password-recovery.sql` en la base indicada por
+`MYSQL_DATABASE` antes de usar la recuperación:
+
+```sh
+mysql -u root -p KindMetrics_Erick < DataBaseScripts/0012-password-recovery.sql
+```
+
+Sustituye `KindMetrics_Erick` por el valor de `MYSQL_DATABASE` del entorno. La
+migración crea `password_recovery_tokens` y los procedimientos
+`sp_password_recovery_request`, `sp_password_recovery_validate` y
+`sp_password_recovery_reset`; no elimina usuarios existentes. En todos los
+entornos, incluida la ejecución local, la recuperación requiere que Gmail envíe
+el OTP; nunca se devuelve un código de depuración. Para enviar por Gmail SMTP,
+configura `MAIL_HOST=smtp.gmail.com`,
+`MAIL_PORT=465`, `MAIL_SECURE=true`, `MAIL_USER` y `MAIL_PASS` en el archivo
+del entorno que ejecuta la API. `npm run dev` carga `.env.dev`; `NODE_ENV=qa`
+carga `.env.qa`; y `NODE_ENV=prod` carga `.env.prod`. Copia las variables
+`MAIL_*` de `.env.example` al archivo correcto y sustituye los valores de
+ejemplo. `MAIL_USER` debe ser la cuenta Gmail completa que enviará el correo.
+`MAIL_PASS` debe ser una contraseña de aplicación de Google de esa misma cuenta,
+no la contraseña normal de Gmail. Para generarla, activa la verificación en dos
+pasos en la cuenta Google y crea una contraseña de aplicación; Google puede no
+mostrar esa opción en cuentas administradas por una organización o con ciertas
+políticas de seguridad. Guarda el secreto solo en el archivo de entorno local o
+en el gestor de secretos del servidor; no lo compartas ni lo subas al
+repositorio. El archivo `.env.dev` está ignorado por Git.
+El correo que el usuario escribe en el portal es el destinatario; no configura
+la cuenta Gmail emisora. El remitente se configura por separado en `MAIL_USER`.
+Configura `APP_BASE_URL` con el origen público de KindMetrics (por ejemplo,
+`https://kindmetrics.example.com`) para construir el enlace seguro enviado por
+correo. En desarrollo se usa `http://localhost:9000` si no se configura.
+
+Gmail admite `465` con TLS implícito (`MAIL_SECURE=true`) o `587` con STARTTLS
+(`MAIL_SECURE=false`); la configuración por defecto del proyecto usa `465`.
+`MAIL_FROM` es opcional y por defecto se usa `MAIL_USER` como remitente. Si se
+define, debe ser la misma cuenta o un alias verificado en Gmail. El correo
+incluye el OTP y un botón para volver a la página de recuperación de
+KindMetrics; ahí se valida el código y se cambia la contraseña. Si Gmail no
+está configurado o rechaza la autenticación, el remitente o la conexión SMTP,
+la API responde con un error específico y el log registra el
+código de error SMTP sin incluir la contraseña. Se puede volver a ejecutar para recrear los
+procedimientos actualizados; la tabla se conserva. El procedimiento de
+restablecimiento devuelve `updated=1` solo si actualizó la contraseña con un OTP
+vigente y no usado; de lo contrario, la operación no se confirma.
+
 ## Selector de empresas
 
 `GET /api/v1/companies/available` requiere un bearer token y devuelve únicamente `id`, `name` y `code` de las empresas activas asignadas al usuario autenticado. La identidad se toma del token; no se acepta un GUID de usuario del cliente. Los administradores de plataforma obtienen todas las empresas activas, conforme a la regla ya usada al validar `x-company-code`. Dashboards, pestañas, paneles y procedimientos siguen requiriendo el código de empresa y verifican acceso en cada solicitud. La UI debe consultar este endpoint para poblar el selector en lugar del endpoint administrativo `/companies/management`.
