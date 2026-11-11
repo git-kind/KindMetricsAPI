@@ -4,6 +4,7 @@ const environment = process.env.NODE_ENV ?? 'dev';
 if (!['dev', 'qa', 'prod'].includes(environment)) {
   throw new Error('NODE_ENV must be one of: dev, qa, prod');
 }
+process.env.NODE_ENV ??= environment;
 
 const envFiles = {
   dev: '.env.dev',
@@ -34,6 +35,11 @@ try {
   await app.listen({ port, host });
 } catch (error) {
   if (error instanceof Error && 'code' in error && error.code === 'EADDRINUSE') {
+    if (await isKindMetricsAlreadyRunning()) {
+      await app.close();
+      console.info(`KindMetrics API is already running at ${baseUrl}; keeping the existing instance.`);
+      process.exit(0);
+    }
     console.error(`Cannot start API: ${host}:${port} is already in use. Stop the existing instance or choose another PORT.`);
   } else {
     const message = error instanceof Error ? error.message : String(error);

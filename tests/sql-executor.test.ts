@@ -31,6 +31,16 @@ describe('Stored Procedure result metadata', () => {
       { name: 'total_calls', type: 'INTEGER' },
     ]);
   });
+
+  it('returns no row sets when a write procedure only returns a result header', () => {
+    expect(procedureResultSets({ affectedRows: 1 })).toEqual([]);
+  });
+
+  it('keeps row sets and filters non-row procedure results', () => {
+    const rows = [{ id: 1, email: 'user@example.com' }];
+
+    expect(procedureResultSets([rows, { affectedRows: 0 }])).toEqual([rows]);
+  });
 });
 
 describe('Stored Procedure execution logging', () => {

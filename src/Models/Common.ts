@@ -1,6 +1,11 @@
 import { z } from 'zod';
 
 export { loginRequestSchema, loginSchema } from './Auth/LoginRequestDto.js';
+export {
+  passwordRecoveryRequestSchema,
+  passwordRecoveryValidateSchema,
+  passwordRecoveryUpdateSchema,
+} from './Auth/PasswordRecoveryDto.js';
 export { createUserRequestSchema, userCreateSchema } from './Users/CreateUserRequestDto.js';
 
 export const guid = z.string().uuid();

@@ -13,6 +13,5 @@ export class AppError extends Error {
     this.statusCode = options.statusCode ?? 500;
     this.code = options.code ?? 'INTERNAL_ERROR';
     this.field = options.field;
-    this.context = options.context;
   }
 }
