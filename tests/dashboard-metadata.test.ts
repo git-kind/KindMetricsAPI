@@ -163,7 +163,7 @@ describe('Dashboard metadata service', () => {
     });
   });
 
-  it('infers and persists the result schema when a procedure is first previewed', async () => {
+  it('infers current result columns without rewriting the stored reference schema', async () => {
     const { service, repository } = createService({
       getActiveProcedureResultSchema: vi.fn().mockResolvedValue({
         schemaVersion: 1,
@@ -182,17 +182,14 @@ describe('Dashboard metadata service', () => {
       { name: 'ratio', type: 'NUMBER' },
       { name: 'label', type: 'STRING' },
     ]);
-    expect(repository.saveInferredProcedureResultSchema).toHaveBeenCalledWith(company, 'sp_dash_summary', {
-      schemaVersion: 1,
-      columns: result.columns,
-    });
+    expect(repository.saveInferredProcedureResultSchema).not.toHaveBeenCalled();
   });
 
-  it('uses MySQL result metadata to populate the schema when the procedure returns no rows', async () => {
+  it('prefers current MySQL result metadata when the procedure returns no rows', async () => {
     const { service, repository } = createService({
       getActiveProcedureResultSchema: vi.fn().mockResolvedValue({
         schemaVersion: 1,
-        columns: [],
+        columns: [{ name: 'stale_column', type: 'INTEGER' }],
       }),
       previewProcedure: vi.fn().mockResolvedValue(
         previewExecution(
@@ -215,10 +212,37 @@ describe('Dashboard metadata service', () => {
       { name: 'total_calls', type: 'INTEGER' },
     ]);
     expect(result.rows).toEqual([]);
-    expect(repository.saveInferredProcedureResultSchema).toHaveBeenCalledWith(company, 'sp_dash_summary', {
-      schemaVersion: 1,
-      columns: result.columns,
+    expect(repository.saveInferredProcedureResultSchema).not.toHaveBeenCalled();
+  });
+
+  it('accepts current columns and numeric types that differ from the stored result schema', async () => {
+    const { service, repository } = createService({
+      getActiveProcedureResultSchema: vi.fn().mockResolvedValue({
+        schemaVersion: 999,
+        columns: [{ name: 'stale_column', type: 'INTEGER' }],
+      }),
+      previewProcedure: vi.fn().mockResolvedValue(
+        previewExecution(
+          [[{ total: '15.75', newly_added: 'ok' }]],
+          [
+            { name: 'total', type: 'NUMBER' },
+            { name: 'newly_added', type: 'STRING' },
+          ],
+        ),
+      ),
     });
+
+    const result = await service.previewProcedure(company, {
+      procedureName: 'sp_dash_summary',
+      parameters: {},
+    });
+
+    expect(result.columns).toEqual([
+      { name: 'total', type: 'NUMBER' },
+      { name: 'newly_added', type: 'STRING' },
+    ]);
+    expect(result.rows).toEqual([{ total: '15.75', newly_added: 'ok' }]);
+    expect(repository.saveInferredProcedureResultSchema).not.toHaveBeenCalled();
   });
 
   it('rejects multiple result sets and results exceeding preview limits', async () => {

@@ -1,20 +1,15 @@
 import { AppError } from '../Errors/AppError.js';
+import {
+  inferDashboardProcedureResultColumns,
+  normalizeDashboardProcedureValue,
+} from '../Helpers/DashboardProcedureResult.js';
 import type { CompanyContext } from '../Models/Common.js';
 import type { DashboardProcedurePreviewDto, DashboardSchemaQueryDto, ValidateDashboardProcedureDto } from '../Models/DashboardMetadata/DashboardMetadataDto.js';
-import { resultSchema as dashboardProcedureResultSchema } from '../Models/DashboardProcedures/DashboardProcedureDto.js';
 import { DashboardMetadataRepository } from '../Repositories/DashboardMetadataRepository.js';
 
 const maxPreviewRows = 500;
 const maxPreviewBytes = 2_000_000;
 type DashboardDataType = 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'DATE' | 'DATETIME';
-
-function jsonSafe(value: unknown): unknown {
-  if (value === undefined) return null;
-  if (typeof value === 'bigint') return value.toString();
-  if (Buffer.isBuffer(value)) return value.toString('utf8');
-  if (value instanceof Date) return value.toISOString();
-  return value;
-}
 
 function invalidPreviewParameter(name: string): never {
   throw new AppError(`El valor de ${name} no coincide con la firma del procedimiento.`, {
@@ -104,63 +99,6 @@ function previewArguments(
   });
 }
 
-function normalizePreviewValue(value: unknown, type: 'STRING' | 'NUMBER' | 'INTEGER' | 'BOOLEAN' | 'DATE' | 'DATETIME'): unknown {
-  if (value === null || value === undefined) return null;
-  if (type === 'STRING') {
-    if (typeof value !== 'string' && !Buffer.isBuffer(value)) {
-      throw new AppError('El procedimiento devolvió un valor incompatible con el contrato de resultados.', {
-        statusCode: 502,
-        code: 'DASHBOARD_PROCEDURE_RESULT_SCHEMA_MISMATCH',
-      });
-    }
-    return jsonSafe(value);
-  }
-  if (type === 'NUMBER') {
-    const number = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
-    if (!Number.isFinite(number)) {
-      throw new AppError('El procedimiento devolvió un valor incompatible con el contrato de resultados.', {
-        statusCode: 502,
-        code: 'DASHBOARD_PROCEDURE_RESULT_SCHEMA_MISMATCH',
-      });
-    }
-    return typeof value === 'string' ? value : number;
-  }
-  if (type === 'INTEGER') {
-    const integer =
-      typeof value === 'bigint'
-        ? value
-        : typeof value === 'number' && Number.isSafeInteger(value)
-          ? BigInt(value)
-          : typeof value === 'string' && /^-?\d+$/.test(value)
-            ? BigInt(value)
-            : null;
-    if (integer === null) {
-      throw new AppError('El procedimiento devolvió un valor incompatible con el contrato de resultados.', {
-        statusCode: 502,
-        code: 'DASHBOARD_PROCEDURE_RESULT_SCHEMA_MISMATCH',
-      });
-    }
-    return integer <= BigInt(Number.MAX_SAFE_INTEGER) && integer >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(integer) : integer.toString();
-  }
-  if (type === 'BOOLEAN') {
-    if (value !== true && value !== false && value !== 0 && value !== 1) {
-      throw new AppError('El procedimiento devolvió un valor incompatible con el contrato de resultados.', {
-        statusCode: 502,
-        code: 'DASHBOARD_PROCEDURE_RESULT_SCHEMA_MISMATCH',
-      });
-    }
-    return value === true || value === 1;
-  }
-  const date = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) {
-    throw new AppError('El procedimiento devolvió un valor incompatible con el contrato de resultados.', {
-      statusCode: 502,
-      code: 'DASHBOARD_PROCEDURE_RESULT_SCHEMA_MISMATCH',
-    });
-  }
-  return type === 'DATE' ? date.toISOString().slice(0, 10) : date.toISOString();
-}
-
 function inferResultSchema(rows: Array<Record<string, unknown>>): {
   schemaVersion: 1;
   columns: Array<{ name: string; type: DashboardDataType }>;
@@ -172,28 +110,10 @@ function inferResultSchema(rows: Array<Record<string, unknown>>): {
       code: 'DASHBOARD_PROCEDURE_RESULT_SCHEMA_UNAVAILABLE',
     });
   }
-  const columns = Object.keys(firstRow).map((name) => {
-    const values = rows.map((row) => row[name]).filter((value) => value != null);
-    const isBoolean = values.length > 0 && values.every((value) => typeof value === 'boolean');
-    const isInteger =
-      values.length > 0 &&
-      values.every(
-        (value) =>
-          typeof value === 'bigint' || (typeof value === 'number' && Number.isSafeInteger(value)) || (typeof value === 'string' && /^-?\d+$/.test(value)),
-      );
-    const isNumber =
-      values.length > 0 &&
-      values.every(
-        (value) =>
-          (typeof value === 'number' && Number.isFinite(value)) ||
-          typeof value === 'bigint' ||
-          (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))),
-      );
-    const isDate = values.length > 0 && values.every((value) => value instanceof Date);
-    const type: DashboardDataType = isBoolean ? 'BOOLEAN' : isInteger ? 'INTEGER' : isNumber ? 'NUMBER' : isDate ? 'DATETIME' : 'STRING';
-    return { name, type };
-  });
-  return { schemaVersion: 1 as const, columns };
+  return {
+    schemaVersion: 1,
+    columns: inferDashboardProcedureResultColumns(rows),
+  };
 }
 
 export class DashboardMetadataService {
@@ -265,14 +185,6 @@ export class DashboardMetadataService {
         code: 'DASHBOARD_PROCEDURE_NOT_ACTIVE',
       });
     }
-    const resultSchema = dashboardProcedureResultSchema.safeParse(storedResultSchema);
-    if (!resultSchema.success) {
-      throw new AppError('El contrato de resultados del procedimiento autorizado es inválido.', {
-        statusCode: 500,
-        code: 'DASHBOARD_PROCEDURE_CONFIGURATION_INVALID',
-      });
-    }
-
     const running = this.activePreviews.get(company.id) ?? 0;
     if (running >= 2) {
       throw new AppError('Se alcanzó el límite de previews concurrentes para la Company.', {
@@ -298,12 +210,11 @@ export class DashboardMetadataService {
           code: 'DASHBOARD_PROCEDURE_RESULT_TOO_LARGE',
         });
       }
-      const columns =
-        resultSchema.data.columns.length > 0
-          ? resultSchema.data.columns
-          : execution.columns.length > 0
-            ? execution.columns
-            : inferResultSchema(rawRows).columns;
+      const columns = execution.columns.length
+        ? execution.columns
+        : rawRows.length
+          ? inferResultSchema(rawRows).columns
+          : [];
       const names = columns.map((column) => column.name);
       if (
         rawRows.some((row) => {
@@ -316,13 +227,18 @@ export class DashboardMetadataService {
           code: 'DASHBOARD_PROCEDURE_RESULT_SCHEMA_MISMATCH',
         });
       }
-      if (resultSchema.data.columns.length === 0) {
-        await this.repository.saveInferredProcedureResultSchema(company, input.procedureName, {
-          schemaVersion: 1,
-          columns,
-        });
-      }
-      const rows = rawRows.map((row) => Object.fromEntries(columns.map((column) => [column.name, normalizePreviewValue(row[column.name], column.type)])));
+      const rows = rawRows.map((row) =>
+        Object.fromEntries(
+          columns.map((column) => [
+            column.name,
+            normalizeDashboardProcedureValue(
+              row[column.name],
+              column.type,
+              'DASHBOARD_PROCEDURE_RESULT_SCHEMA_MISMATCH',
+            ),
+          ]),
+        ),
+      );
       if (Buffer.byteLength(JSON.stringify(rows), 'utf8') > maxPreviewBytes) {
         throw new AppError('El resultado excede el límite de tamaño del preview.', {
           statusCode: 413,

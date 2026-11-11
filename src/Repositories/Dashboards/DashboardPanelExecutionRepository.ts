@@ -1,5 +1,6 @@
 import type { RowDataPacket } from 'mysql2';
 import type { CompanyContext } from '../../Models/Common.js';
+import type { ProcedureResultColumn } from '../../Database/SqlExecutor.js';
 import { CompanyDatabaseRepository, type ProcedureParameter } from '../CompanyDatabaseRepository.js';
 
 export type DashboardPanelExecutionConfig = {
@@ -14,7 +15,6 @@ export type DashboardPanelExecutionConfig = {
   procedureStatus: string | null;
   procedureSecurityType: string | null;
   parametersSchema: unknown;
-  resultSchema: unknown;
   procedureParams: unknown;
   panelTimeoutSeconds: number;
   procedureTimeoutSeconds: number | null;
@@ -43,15 +43,19 @@ export class DashboardPanelExecutionRepository {
       procedureStatus: row.procedure_status == null ? null : String(row.procedure_status),
       procedureSecurityType: row.procedure_security_type == null ? null : String(row.procedure_security_type),
       parametersSchema: parse(row.parameters_schema),
-      resultSchema: parse(row.result_schema),
       procedureParams: parse(row.procedure_params),
       panelTimeoutSeconds: Number(row.panel_timeout_seconds ?? 30),
       procedureTimeoutSeconds: row.procedure_timeout_seconds == null ? null : Number(row.procedure_timeout_seconds),
     } satisfies DashboardPanelExecutionConfig;
   }
 
-  async execute(company: CompanyContext, procedureName: string, parameters: readonly ProcedureParameter[], timeoutSeconds: number) {
+  async execute(
+    company: CompanyContext,
+    procedureName: string,
+    parameters: readonly ProcedureParameter[],
+    timeoutSeconds: number,
+  ): Promise<{ resultSets: RowDataPacket[][]; columns: ProcedureResultColumn[] }> {
     if (!/^sp_dash_[a-zA-Z0-9_]{1,112}$/.test(procedureName)) throw new Error('Invalid authorized procedure name');
-    return this.database.executeReadOnlyProcedure(company, procedureName, parameters, timeoutSeconds);
+    return this.database.executeReadOnlyProcedureWithMetadata(company, procedureName, parameters, timeoutSeconds);
   }
 }

@@ -1,5 +1,10 @@
 import { z } from 'zod';
 import { AppError } from '../Errors/AppError.js';
+import {
+  inferDashboardProcedureResultColumns,
+  normalizeDashboardProcedureValue,
+  type DashboardProcedureResultType,
+} from '../Helpers/DashboardProcedureResult.js';
 import type { CompanyContext } from '../Models/Common.js';
 import { DashboardPanelExecutionRepository } from '../Repositories/Dashboards/DashboardPanelExecutionRepository.js';
 import type { ProcedureParameter } from '../Repositories/CompanyDatabaseRepository.js';
@@ -23,11 +28,6 @@ const panelMappingsSchema = z.object({
     }),
   ),
 });
-const resultSchema = z.object({
-  schemaVersion: z.literal(1),
-  columns: z.array(z.object({ name: z.string(), type: z.enum(parameterTypes) })),
-});
-
 type FilterValue = string | number | boolean | null;
 type ExecutionFilters = Record<string, FilterValue>;
 
@@ -48,58 +48,36 @@ function valueMatchesType(value: unknown, type: (typeof parameterTypes)[number])
   }
 }
 
-function normalizeRows(rows: Array<Record<string, unknown>>, columns: Array<{ name: string; type: (typeof parameterTypes)[number] }>) {
+function normalizeRows(
+  rows: Array<Record<string, unknown>>,
+  columns: Array<{ name: string; type: DashboardProcedureResultType }>,
+) {
   const allowedColumns = new Set(columns.map((column) => column.name));
   for (const row of rows) {
     const keys = Object.keys(row);
-    if (keys.some((key) => !allowedColumns.has(key)) || columns.some((column) => !Object.hasOwn(row, column.name))) {
-      throw new AppError('El procedimiento devolvió columnas fuera del contrato registrado.', {
+    if (
+      keys.length !== columns.length ||
+      keys.some((key) => !allowedColumns.has(key)) ||
+      columns.some((column) => !Object.hasOwn(row, column.name))
+    ) {
+      throw new AppError('El procedimiento devolvió columnas inconsistentes con su metadata actual.', {
         statusCode: 502,
         code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH',
       });
     }
   }
-  return rows.map((row) => {
-    const normalized: Record<string, unknown> = {};
-    for (const column of columns) {
-      const value = row[column.name];
-      if (value == null) {
-        normalized[column.name] = null;
-        continue;
-      }
-      if (column.type === 'STRING') {
-        if (typeof value !== 'string' && !Buffer.isBuffer(value))
-          throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
-        normalized[column.name] = Buffer.isBuffer(value) ? value.toString('utf8') : value;
-      } else if (column.type === 'NUMBER') {
-        const numeric = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : Number.NaN;
-        if (!Number.isFinite(numeric)) throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
-        normalized[column.name] = Number.isSafeInteger(numeric) ? numeric : String(value);
-      } else if (column.type === 'INTEGER') {
-        const integer =
-          typeof value === 'bigint'
-            ? value
-            : typeof value === 'number' && Number.isSafeInteger(value)
-              ? BigInt(value)
-              : typeof value === 'string' && /^-?\d+$/.test(value)
-                ? BigInt(value)
-                : null;
-        if (integer === null) throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
-        normalized[column.name] =
-          integer <= BigInt(Number.MAX_SAFE_INTEGER) && integer >= BigInt(Number.MIN_SAFE_INTEGER) ? Number(integer) : integer.toString();
-      } else if (column.type === 'BOOLEAN') {
-        if (value !== true && value !== false && value !== 0 && value !== 1)
-          throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
-        normalized[column.name] = value === true || value === 1;
-      } else {
-        const date = value instanceof Date ? value : typeof value === 'string' ? new Date(value) : null;
-        if (!date || Number.isNaN(date.getTime()))
-          throw new AppError('Tipo de columna inválido.', { statusCode: 502, code: 'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH' });
-        normalized[column.name] = column.type === 'DATE' ? date.toISOString().slice(0, 10) : date.toISOString();
-      }
-    }
-    return normalized;
-  });
+  return rows.map((row) =>
+    Object.fromEntries(
+      columns.map((column) => [
+        column.name,
+        normalizeDashboardProcedureValue(
+          row[column.name],
+          column.type,
+          'DASHBOARD_PANEL_RESULT_SCHEMA_MISMATCH',
+        ),
+      ]),
+    ),
+  );
 }
 
 export class DashboardPanelExecutionService {
@@ -131,8 +109,7 @@ export class DashboardPanelExecutionService {
     }
     const contract = catalogParametersSchema.safeParse(config.parametersSchema);
     const mapping = panelMappingsSchema.safeParse(config.procedureParams);
-    const results = resultSchema.safeParse(config.resultSchema);
-    if (!contract.success || !mapping.success || !results.success) {
+    if (!contract.success || !mapping.success) {
       throw new AppError('La configuración almacenada del Panel o del procedimiento es inválida.', {
         statusCode: 500,
         code: 'DASHBOARD_PANEL_CONFIGURATION_INVALID',
@@ -195,14 +172,21 @@ export class DashboardPanelExecutionService {
     const startedAt = Date.now();
     try {
       const timeoutSeconds = Math.min(config.panelTimeoutSeconds, config.procedureTimeoutSeconds ?? config.panelTimeoutSeconds);
-      const sets = (await this.repository.execute(company, config.procedureName, parameters, timeoutSeconds)) ?? [];
+      const execution = await this.repository.execute(company, config.procedureName, parameters, timeoutSeconds);
+      const sets = execution.resultSets ?? [];
       if (sets.length > 1) {
         throw new AppError('El procedimiento devolvió más de un conjunto de resultados.', {
           statusCode: 502,
           code: 'DASHBOARD_PANEL_RESULT_INVALID',
         });
       }
-      const rows = normalizeRows((sets[0] ?? []) as Array<Record<string, unknown>>, results.data.columns);
+      const rawRows = (sets[0] ?? []) as Array<Record<string, unknown>>;
+      const columns = execution.columns.length
+        ? execution.columns
+        : rawRows.length
+          ? inferDashboardProcedureResultColumns(rawRows)
+          : [];
+      const rows = normalizeRows(rawRows, columns);
       const serialized = JSON.stringify(rows);
       if (rows.length > 5_000 || Buffer.byteLength(serialized, 'utf8') > 2_000_000) {
         throw new AppError('El resultado excede los límites permitidos para un Panel.', {
@@ -213,7 +197,7 @@ export class DashboardPanelExecutionService {
       return {
         panelGuid,
         panelType: config.panelType,
-        columns: results.data.columns,
+        columns,
         rows,
         rowCount: rows.length,
         executionTimeMs: Date.now() - startedAt,

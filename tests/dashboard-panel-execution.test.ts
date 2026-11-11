@@ -30,10 +30,16 @@ function config(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function createService(configOverrides: Record<string, unknown> = {}, resultRows: unknown[] = [{ total_calls: 42n }]) {
+function createService(
+  configOverrides: Record<string, unknown> = {},
+  resultRows: unknown[] = [{ total_calls: 42n }],
+  columns: Array<{ name: string; type: 'STRING' | 'NUMBER' | 'INTEGER' | 'DATE' | 'DATETIME' }> = [
+    { name: 'total_calls', type: 'INTEGER' },
+  ],
+) {
   const repository = {
     getConfig: vi.fn().mockResolvedValue(config(configOverrides)),
-    execute: vi.fn().mockResolvedValue([resultRows]),
+    execute: vi.fn().mockResolvedValue({ resultSets: [resultRows], columns }),
   } as unknown as DashboardPanelExecutionRepository;
   return { service: new DashboardPanelExecutionService(repository), repository };
 }
@@ -48,6 +54,45 @@ describe('Dashboard Panel execution', () => {
     expect(result.columns).toEqual([{ name: 'total_calls', type: 'INTEGER' }]);
   });
 
+  it('uses current result metadata instead of blocking on the stored result schema', async () => {
+    const { service } = createService(
+      {
+        resultSchema: { oldOrInvalid: true },
+      },
+      [{ total_calls: '42.5', label: 'today' }],
+      [
+        { name: 'label', type: 'STRING' },
+        { name: 'total_calls', type: 'NUMBER' },
+      ],
+    );
+
+    await expect(
+      service.execute(company, dashboardGuid, tabGuid, panelGuid, {}, userGuid),
+    ).resolves.toMatchObject({
+      columns: [
+        { name: 'label', type: 'STRING' },
+        { name: 'total_calls', type: 'NUMBER' },
+      ],
+      rows: [{ total_calls: '42.5', label: 'today' }],
+    });
+  });
+
+  it('returns current result columns when a procedure has no rows', async () => {
+    const { service } = createService(
+      { resultSchema: { stale: true } },
+      [],
+      [{ name: 'new_metric', type: 'NUMBER' }],
+    );
+
+    await expect(
+      service.execute(company, dashboardGuid, tabGuid, panelGuid, {}, userGuid),
+    ).resolves.toMatchObject({
+      columns: [{ name: 'new_metric', type: 'NUMBER' }],
+      rows: [],
+      rowCount: 0,
+    });
+  });
+
   it('rejects filters not mapped by the Panel and does not execute the procedure', async () => {
     const { service, repository } = createService();
 
@@ -59,7 +104,7 @@ describe('Dashboard Panel execution', () => {
   });
 
   it('rejects missing required mapped values and inactive resources', async () => {
-    const { service, repository } = createService();
+    const { repository } = createService();
     const inactive = createService({ status: 'INACTIVE' });
     await expect(inactive.service.execute(company, dashboardGuid, tabGuid, panelGuid, {}, userGuid)).rejects.toMatchObject({
       code: 'DASHBOARD_PANEL_NOT_FOUND',
