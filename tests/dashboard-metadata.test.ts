@@ -215,6 +215,33 @@ describe('Dashboard metadata service', () => {
     expect(repository.saveInferredProcedureResultSchema).not.toHaveBeenCalled();
   });
 
+  it('uses the saved result fields only when MySQL metadata and rows are unavailable', async () => {
+    const { service, repository } = createService({
+      getActiveProcedureResultSchema: vi.fn().mockResolvedValue({
+        schemaVersion: 1,
+        columns: [
+          { name: 'time', type: 'DATETIME' },
+          { name: 'call_type', type: 'STRING' },
+          { name: 'total_calls', type: 'INTEGER' },
+        ],
+      }),
+      previewProcedure: vi.fn().mockResolvedValue(previewExecution([])),
+    });
+
+    const result = await service.previewProcedure(company, {
+      procedureName: 'sp_dash_summary',
+      parameters: {},
+    });
+
+    expect(result.columns).toEqual([
+      { name: 'time', type: 'DATETIME' },
+      { name: 'call_type', type: 'STRING' },
+      { name: 'total_calls', type: 'INTEGER' },
+    ]);
+    expect(result.rows).toEqual([]);
+    expect(repository.saveInferredProcedureResultSchema).not.toHaveBeenCalled();
+  });
+
   it('accepts current columns and numeric types that differ from the stored result schema', async () => {
     const { service, repository } = createService({
       getActiveProcedureResultSchema: vi.fn().mockResolvedValue({

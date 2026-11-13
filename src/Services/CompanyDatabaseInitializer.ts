@@ -17,6 +17,7 @@ const migrationFiles = [
   '0007-dashboard-procedure-catalog.sql',
   '0008-dashboard-panel-procedure-link.sql',
   '0009-dashboard-duplication-procedure-links.sql',
+  '0010-dashboard-time-series.sql',
 ];
 
 export interface CompanyDatabaseInitializationConfig {

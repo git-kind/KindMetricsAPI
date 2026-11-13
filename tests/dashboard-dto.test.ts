@@ -206,6 +206,203 @@ describe('Dashboard DTOs', () => {
     ).toBe(true);
   });
 
+  it('accepts built-in and custom BAR styles while rejecting invalid custom colors', () => {
+    const barPanel = {
+      title: 'Calls by day',
+      panelType: 'BAR',
+      gridX: 0,
+      gridY: 0,
+      gridW: 6,
+      gridH: 3,
+      dashboardProcedureGuid: 'b6f7a16e-fbd5-4cfb-976c-63b41852fa2a',
+      procedureParams: { schemaVersion: 1, parameters: [] },
+      visualizationConfig: {
+        schemaVersion: 1,
+        properties: {
+          xField: 'day',
+          yFields: ['total_calls'],
+          barStyle: 'purple',
+          barWidthPercent: 70,
+          barCategoryGapPercent: 25,
+          xAxisLabelRotate: 45,
+        },
+      },
+    };
+
+    expect(createDashboardPanelSchema.safeParse(barPanel).success).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...barPanel,
+        visualizationConfig: {
+          ...barPanel.visualizationConfig,
+          properties: {
+            ...barPanel.visualizationConfig.properties,
+            barStyle: 'custom',
+            barCustomColor: '#4388D4',
+          },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...barPanel,
+        visualizationConfig: {
+          ...barPanel.visualizationConfig,
+          properties: {
+            ...barPanel.visualizationConfig.properties,
+            barStyle: 'custom',
+            barCustomColor: 'url(javascript:alert(1))',
+          },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...barPanel,
+        visualizationConfig: {
+          ...barPanel.visualizationConfig,
+          properties: {
+            ...barPanel.visualizationConfig.properties,
+            barStyle: 'unknown',
+          },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...barPanel,
+        visualizationConfig: {
+          ...barPanel.visualizationConfig,
+          properties: {
+            ...barPanel.visualizationConfig.properties,
+            barWidthPercent: 120,
+          },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...barPanel,
+        visualizationConfig: {
+          ...barPanel.visualizationConfig,
+          properties: {
+            ...barPanel.visualizationConfig.properties,
+            xAxisLabelRotate: -15,
+          },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...barPanel,
+        visualizationConfig: {
+          ...barPanel.visualizationConfig,
+          properties: {
+            ...barPanel.visualizationConfig.properties,
+            barCategoryGapPercent: 95,
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts Time Series line, bar, and point modes with bounded options', () => {
+    const timeSeriesPanel = {
+      title: 'Calls over time',
+      panelType: 'TIME_SERIES',
+      gridX: 0,
+      gridY: 0,
+      gridW: 6,
+      gridH: 3,
+      dashboardProcedureGuid: 'b6f7a16e-fbd5-4cfb-976c-63b41852fa2a',
+      procedureParams: { schemaVersion: 1, parameters: [] },
+      visualizationConfig: {
+        schemaVersion: 1,
+        properties: {
+          xField: 'timestamp',
+          yFields: ['total_calls'],
+          chartMode: 'lines',
+          interpolation: 'smooth',
+          lineWidth: 2,
+          fillOpacity: 19,
+          gradientMode: 'opacity',
+          lineStyle: 'dashed',
+        },
+      },
+    };
+
+    expect(createDashboardPanelSchema.safeParse(timeSeriesPanel).success).toBe(true);
+    for (const chartMode of ['lines', 'bars', 'points']) {
+      expect(
+        createDashboardPanelSchema.safeParse({
+          ...timeSeriesPanel,
+          visualizationConfig: {
+            ...timeSeriesPanel.visualizationConfig,
+            properties: {
+              ...timeSeriesPanel.visualizationConfig.properties,
+              chartMode,
+            },
+          },
+        }).success,
+      ).toBe(true);
+    }
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...timeSeriesPanel,
+        visualizationConfig: {
+          ...timeSeriesPanel.visualizationConfig,
+          properties: {
+            ...timeSeriesPanel.visualizationConfig.properties,
+            chartMode: 'unknown',
+          },
+        },
+      }).success,
+    ).toBe(false);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...timeSeriesPanel,
+        visualizationConfig: {
+          ...timeSeriesPanel.visualizationConfig,
+          properties: {
+            ...timeSeriesPanel.visualizationConfig.properties,
+            pointSize: 21,
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts future visualization identifiers with bounded generic JSON config', () => {
+    const futurePanel = {
+      title: 'Custom visualization',
+      panelType: 'CUSTOM_TIMELINE_V2',
+      gridX: 0,
+      gridY: 0,
+      gridW: 6,
+      gridH: 3,
+      dashboardProcedureGuid: 'b6f7a16e-fbd5-4cfb-976c-63b41852fa2a',
+      procedureParams: { schemaVersion: 1, parameters: [] },
+      visualizationConfig: {
+        schemaVersion: 1,
+        properties: { xField: 'time', customOption: { mode: 'gradient' } },
+      },
+    };
+
+    expect(createDashboardPanelSchema.safeParse(futurePanel).success).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...futurePanel,
+        panelType: 'custom-timeline',
+      }).success,
+    ).toBe(false);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...futurePanel,
+        panelType: 'A'.repeat(41),
+      }).success,
+    ).toBe(false);
+  });
+
   it('accepts a bounded Panel grid and rejects mismatched cells and unsafe colors', () => {
     const gridPanel = {
       title: 'Call metrics',

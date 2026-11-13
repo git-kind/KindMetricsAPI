@@ -116,6 +116,35 @@ function inferResultSchema(rows: Array<Record<string, unknown>>): {
   };
 }
 
+function storedResultColumns(value: unknown): Array<{
+  name: string;
+  type: DashboardDataType;
+}> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return [];
+  }
+  const schema = value as Record<string, unknown>;
+  if (schema.schemaVersion !== 1 || !Array.isArray(schema.columns)) {
+    return [];
+  }
+  const validTypes = new Set<DashboardDataType>([
+    'STRING',
+    'NUMBER',
+    'INTEGER',
+    'BOOLEAN',
+    'DATE',
+    'DATETIME',
+  ]);
+  return schema.columns.filter(
+    (column): column is { name: string; type: DashboardDataType } =>
+      typeof column === 'object' &&
+      column !== null &&
+      !Array.isArray(column) &&
+      typeof (column as Record<string, unknown>).name === 'string' &&
+      validTypes.has((column as Record<string, unknown>).type as DashboardDataType),
+  );
+}
+
 export class DashboardMetadataService {
   private readonly activePreviews = new Map<number, number>();
 
@@ -214,7 +243,7 @@ export class DashboardMetadataService {
         ? execution.columns
         : rawRows.length
           ? inferResultSchema(rawRows).columns
-          : [];
+          : storedResultColumns(storedResultSchema);
       const names = columns.map((column) => column.name);
       if (
         rawRows.some((row) => {

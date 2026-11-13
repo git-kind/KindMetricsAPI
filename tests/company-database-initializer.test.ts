@@ -96,6 +96,7 @@ describe('CompanyDatabaseInitializer', () => {
     const procedureCreate = statements.find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_procedure_create'));
     const procedureUpdate = statements.find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_procedure_update'));
     const panelCreate = [...statements].reverse().find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_panel_create'));
+    const panelUpdate = [...statements].reverse().find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_panel_update'));
     expect(procedureCreate).toContain('^sp_dash_[A-Za-z0-9_]{1,112}$');
     expect(procedureCreate).toContain("'ACTIVE'");
     expect(procedureCreate).not.toContain("SECURITY_TYPE = 'INVOKER'");
@@ -104,7 +105,10 @@ describe('CompanyDatabaseInitializer', () => {
     const procedureSync = statements.find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_procedure_sync_no_parameter'));
     expect(procedureSync).not.toContain("SECURITY_TYPE = 'INVOKER'");
     expect(procedureUpdate).not.toContain('DASHBOARD_PROCEDURE_REVIEW_REQUIRED');
-    expect(panelCreate).toContain("'PANEL'");
+    expect(panelCreate).toContain("NOT REGEXP '^[A-Z][A-Z0-9_]{0,39}$'");
+    expect(panelCreate).not.toContain("'TIME_SERIES'");
+    expect(panelUpdate).toContain("NOT REGEXP '^[A-Z][A-Z0-9_]{0,39}$'");
+    expect(panelUpdate).not.toContain("'TIME_SERIES'");
     expect(endMock).toHaveBeenCalledOnce();
   });
 

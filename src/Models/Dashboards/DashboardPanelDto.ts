@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const guid = z.string().uuid();
 const expectedVersion = z.number().int().positive().max(4_294_967_295).safe();
-const panelTypes = ['NUMBER', 'TABLE', 'LINE', 'BAR', 'PIE', 'GAUGE', 'HEATMAP', 'MAP', 'TEXT', 'STAT', 'PANEL', 'GAUGE_GRID'] as const;
+const panelType = z.string().regex(/^[A-Z][A-Z0-9_]{0,39}$/);
 const secretKey = /password|passwd|secret|token|credential|private.?key|api.?key/i;
 
 function validConfig(value: unknown): boolean {
@@ -75,6 +75,7 @@ const procedureParamsSchema = z
 
 const fieldName = z.string().trim().min(1).max(128);
 const color = z.string().trim().min(1).max(40);
+const hexColor = z.string().regex(/^#(?:[\da-fA-F]{3}|[\da-fA-F]{6})$/);
 const thresholdSchema = z.object({ value: z.number().finite(), color }).strict();
 const panelGridConditionSchema = z.object({
   expression: z.string().trim().min(1).max(512),
@@ -178,6 +179,30 @@ const visualizationPropertiesSchemas = {
     labels: z.boolean().optional(),
     colors: z.array(color).max(32).optional(),
     stacked: z.boolean().optional(),
+    barStyle: z.enum(['green', 'purple', 'orange', 'custom']).optional(),
+    barCustomColor: hexColor.optional(),
+    barWidthPercent: z.number().int().min(10).max(100).optional(),
+    barCategoryGapPercent: z.number().int().min(0).max(90).optional(),
+    xAxisLabelRotate: z.number().int().min(0).max(90).optional(),
+  }).strict().refine(
+    (properties) => properties.barStyle !== 'custom' || properties.barCustomColor !== undefined,
+    { path: ['barCustomColor'], message: 'El estilo personalizado requiere un color.' },
+  ),
+  TIME_SERIES: z.object({
+    xField: fieldName,
+    yFields: z.array(fieldName).min(1).max(32),
+    legend: z.boolean().optional(),
+    chartMode: z.enum(['lines', 'bars', 'points']).optional(),
+    interpolation: z.enum(['linear', 'smooth', 'step-start', 'step-end']).optional(),
+    lineWidth: z.number().int().min(0).max(10).optional(),
+    fillOpacity: z.number().int().min(0).max(100).optional(),
+    gradientMode: z.enum(['none', 'opacity', 'horizontal', 'scheme']).optional(),
+    lineStyle: z.enum(['solid', 'dashed', 'dotted']).optional(),
+    barWidthPercent: z.number().int().min(10).max(100).optional(),
+    barCategoryGapPercent: z.number().int().min(0).max(90).optional(),
+    xAxisLabelRotate: z.number().int().min(0).max(90).optional(),
+    pointSize: z.number().int().min(2).max(20).optional(),
+    stacked: z.boolean().optional(),
   }).strict(),
   PIE: z.object({
     categoryField: fieldName,
@@ -237,12 +262,19 @@ const visualizationPropertiesSchemas = {
   ),
 } as const;
 
-export function validPanelVisualizationConfig(panelType: (typeof panelTypes)[number], config: z.infer<typeof configSchema> | null | undefined): boolean {
-  if (config == null) return false;
-  return visualizationPropertiesSchemas[panelType].safeParse(config.properties).success;
+export function validPanelVisualizationConfig(panelTypeName: string, config: z.infer<typeof configSchema> | null | undefined): boolean {
+  const parsedConfig = configSchema.safeParse(config);
+  if (!parsedConfig.success) return false;
+  const knownSchema =
+    visualizationPropertiesSchemas[
+      panelTypeName as keyof typeof visualizationPropertiesSchemas
+    ];
+  return knownSchema
+    ? knownSchema.safeParse(parsedConfig.data.properties).success
+    : true;
 }
 
-const procedureAssociationSchema = (panel: { panelType: (typeof panelTypes)[number]; dashboardProcedureGuid?: string | null; procedureParams?: unknown }) => {
+const procedureAssociationSchema = (panel: { panelType: string; dashboardProcedureGuid?: string | null; procedureParams?: unknown }) => {
   if (panel.panelType === 'TEXT') return true;
   return Boolean(panel.dashboardProcedureGuid) && procedureParamsSchema.safeParse(panel.procedureParams).success;
 };
@@ -273,7 +305,7 @@ export const dashboardPanelGuidParamsSchema = z.object({
 
 export const dashboardPanelListQuerySchema = z.object({
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
-  panelType: z.enum(panelTypes).optional(),
+  panelType: panelType.optional(),
 });
 
 export const executeDashboardPanelSchema = z
@@ -291,7 +323,7 @@ export const executeDashboardPanelSchema = z
 
 export const dashboardPanelExecutionResponseSchema = z.object({
   panelGuid: guid,
-  panelType: z.enum(panelTypes),
+  panelType,
   columns: z.array(z.object({ name: z.string(), type: z.string() }).strict()),
   rows: z.array(z.record(z.string(), z.unknown())),
   rowCount: z.number().int().nonnegative(),
@@ -311,7 +343,7 @@ export const createDashboardPanelSchema = z
   .object({
     title: z.string().trim().min(1).max(200),
     description: z.string().max(20_000).nullable().optional(),
-    panelType: z.enum(panelTypes),
+    panelType,
     dashboardProcedureGuid: guid.nullable().optional(),
     procedureParams: procedureParamsSchema.optional(),
     executionTimeoutSeconds: z.number().int().min(1).max(300).default(30),
@@ -355,7 +387,7 @@ export const updateDashboardPanelSchema = z
   .object({
     title: z.string().trim().min(1).max(200).optional(),
     description: z.string().max(20_000).nullable().optional(),
-    panelType: z.enum(panelTypes).optional(),
+    panelType: panelType.optional(),
     dashboardProcedureGuid: guid.nullable().optional(),
     procedureParams: procedureParamsSchema.nullable().optional(),
     executionTimeoutSeconds: z.number().int().min(1).max(300).optional(),
@@ -448,7 +480,7 @@ export const dashboardPanelResponseSchema = z.object({
   tabId: z.number().int().positive().safe(),
   title: z.string(),
   description: z.string().nullable(),
-  panelType: z.enum(panelTypes),
+  panelType,
   dashboardProcedureGuid: guid.nullable(),
   procedureParams: procedureParamsSchema.nullable(),
   executionTimeoutSeconds: z.number().int().positive().max(300),
