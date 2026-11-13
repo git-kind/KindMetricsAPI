@@ -240,16 +240,30 @@ const visualizationPropertiesSchemas = {
   GAUGE_GRID: z.object({
     columns: z.number().int().min(1).max(12),
     rows: z.number().int().min(1).max(8),
-    design: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/).optional(),
+    design: z.enum(['arc', 'ring']).optional(),
+    orientation: z.enum(['auto', 'horizontal', 'vertical']).optional(),
+    barWidthFactor: z.number().finite().min(0.1).max(1).optional(),
+    segments: z.number().int().min(1).max(100).optional(),
+    segmentSpacing: z.number().finite().min(0).max(1).optional(),
+    textMode: z.enum(['auto', 'value', 'name', 'value_and_name', 'none']).optional(),
     minimum: z.number().finite().optional(),
     maximum: z.number().finite().optional(),
+    neutralValue: z.number().finite().optional(),
     unit: z.string().max(40).optional(),
     defaultColor: color.optional(),
+    showSparkline: z.boolean().optional(),
+    showThresholds: z.boolean().optional(),
+    showLabels: z.boolean().optional(),
+    gradient: z.boolean().optional(),
+    barGlow: z.boolean().optional(),
+    centerGlow: z.boolean().optional(),
     gauges: z.array(gaugeGridGaugeSchema).min(1).max(48),
   }).strict().refine((properties) =>
     properties.gauges.length === properties.columns * properties.rows &&
     new Set(properties.gauges.map((gauge) => gauge.id)).size === properties.gauges.length &&
-    (properties.minimum === undefined || properties.maximum === undefined || properties.minimum < properties.maximum),
+    (properties.minimum === undefined || properties.maximum === undefined || properties.minimum < properties.maximum) &&
+    (properties.neutralValue === undefined || properties.minimum === undefined || properties.neutralValue >= properties.minimum) &&
+    (properties.neutralValue === undefined || properties.maximum === undefined || properties.neutralValue < properties.maximum),
   ),
   TEXT: z.object({ content: z.string().max(20_000).refine((value) => !/[<>]/.test(value)), format: z.literal('plain').default('plain') }).strict(),
   PANEL: z.object({

@@ -372,6 +372,85 @@ describe('Dashboard DTOs', () => {
     ).toBe(false);
   });
 
+  it('accepts bounded Gauge Grid display options and rejects invalid ranges', () => {
+    const gaugeGridPanel = {
+      title: 'Gauge grid',
+      panelType: 'GAUGE_GRID',
+      gridX: 0,
+      gridY: 0,
+      gridW: 6,
+      gridH: 3,
+      dashboardProcedureGuid: 'b6f7a16e-fbd5-4cfb-976c-63b41852fa2a',
+      procedureParams: { schemaVersion: 1, parameters: [] },
+      visualizationConfig: {
+        schemaVersion: 1,
+        properties: {
+          columns: 1,
+          rows: 1,
+          design: 'ring',
+          orientation: 'horizontal',
+          barWidthFactor: 0.41,
+          segments: 27,
+          segmentSpacing: 0.36,
+          textMode: 'value_and_name',
+          minimum: 0,
+          maximum: 100,
+          neutralValue: 20,
+          showSparkline: true,
+          showThresholds: true,
+          showLabels: true,
+          gradient: true,
+          barGlow: false,
+          centerGlow: true,
+          gauges: [{
+            id: 'calls',
+            title: 'Calls',
+            source: 'FIELD',
+            field: 'total_calls',
+            format: 'number',
+          }],
+        },
+      },
+    };
+
+    expect(createDashboardPanelSchema.safeParse(gaugeGridPanel).success).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...gaugeGridPanel,
+        visualizationConfig: {
+          schemaVersion: 1,
+          properties: {
+            columns: 1,
+            rows: 1,
+            minimum: 0,
+            maximum: 100,
+            gauges: gaugeGridPanel.visualizationConfig.properties.gauges,
+          },
+        },
+      }).success,
+    ).toBe(true);
+    for (const invalid of [
+      { barWidthFactor: 1.1 },
+      { segments: 0 },
+      { segmentSpacing: -0.1 },
+      { neutralValue: 100 },
+      { textMode: 'unknown' },
+    ]) {
+      expect(
+        createDashboardPanelSchema.safeParse({
+          ...gaugeGridPanel,
+          visualizationConfig: {
+            ...gaugeGridPanel.visualizationConfig,
+            properties: {
+              ...gaugeGridPanel.visualizationConfig.properties,
+              ...invalid,
+            },
+          },
+        }).success,
+      ).toBe(false);
+    }
+  });
+
   it('accepts future visualization identifiers with bounded generic JSON config', () => {
     const futurePanel = {
       title: 'Custom visualization',
