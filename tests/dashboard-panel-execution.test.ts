@@ -135,4 +135,21 @@ describe('Dashboard Panel execution', () => {
     });
     expect(parameterized.repository.execute).toHaveBeenCalledWith(company, 'sp_dash_AVG_Calls_Duration', [1], 20);
   });
+
+  it('preserves database error metadata for safe server-side diagnostics', async () => {
+    const databaseError = Object.assign(new Error('Unknown column'), {
+      code: 'ER_BAD_FIELD_ERROR',
+      errno: 1054,
+      sqlState: '42S22',
+    });
+    const { service, repository } = createService();
+    vi.mocked(repository.execute).mockRejectedValue(databaseError);
+
+    await expect(
+      service.execute(company, dashboardGuid, tabGuid, panelGuid, {}, userGuid),
+    ).rejects.toMatchObject({
+      code: 'DASHBOARD_PANEL_EXECUTION_FAILED',
+      cause: databaseError,
+    });
+  });
 });

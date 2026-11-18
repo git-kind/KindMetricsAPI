@@ -119,9 +119,14 @@ const gaugeGridGaugeSchema = z.discriminatedUnion('source', [
     format: z.enum(['number', 'percent', 'duration']).default('number'),
     decimals: z.number().int().min(0).max(6).optional(),
     unit: z.string().max(32).optional(),
+    minimum: z.number().finite().optional(),
+    maximum: z.number().finite().optional(),
     defaultColor: color.optional(),
     thresholds: z.array(thresholdSchema).max(32).optional(),
-  }).strict(),
+  }).strict().refine(
+    (gauge) => gauge.minimum === undefined || gauge.maximum === undefined || gauge.minimum < gauge.maximum,
+    { path: ['maximum'], message: 'El mínimo del medidor debe ser menor que su máximo.' },
+  ),
   z.object({
     id: z.string().min(1).max(64),
     title: z.string().max(100),
@@ -130,9 +135,14 @@ const gaugeGridGaugeSchema = z.discriminatedUnion('source', [
     format: z.enum(['number', 'percent', 'duration']).default('number'),
     decimals: z.number().int().min(0).max(6).optional(),
     unit: z.string().max(32).optional(),
+    minimum: z.number().finite().optional(),
+    maximum: z.number().finite().optional(),
     defaultColor: color.optional(),
     thresholds: z.array(thresholdSchema).max(32).optional(),
-  }).strict(),
+  }).strict().refine(
+    (gauge) => gauge.minimum === undefined || gauge.maximum === undefined || gauge.minimum < gauge.maximum,
+    { path: ['maximum'], message: 'El mínimo del medidor debe ser menor que su máximo.' },
+  ),
 ]);
 
 const visualizationPropertiesSchemas = {
@@ -192,6 +202,7 @@ const visualizationPropertiesSchemas = {
     xField: fieldName,
     yFields: z.array(fieldName).min(1).max(32),
     legend: z.boolean().optional(),
+    xAxisFormat: z.enum(['date', 'time', 'date_time', 'datetime']).optional(),
     chartMode: z.enum(['lines', 'bars', 'points']).optional(),
     interpolation: z.enum(['linear', 'smooth', 'step-start', 'step-end']).optional(),
     lineWidth: z.number().int().min(0).max(10).optional(),
@@ -263,7 +274,12 @@ const visualizationPropertiesSchemas = {
     new Set(properties.gauges.map((gauge) => gauge.id)).size === properties.gauges.length &&
     (properties.minimum === undefined || properties.maximum === undefined || properties.minimum < properties.maximum) &&
     (properties.neutralValue === undefined || properties.minimum === undefined || properties.neutralValue >= properties.minimum) &&
-    (properties.neutralValue === undefined || properties.maximum === undefined || properties.neutralValue < properties.maximum),
+    (properties.neutralValue === undefined || properties.maximum === undefined || properties.neutralValue < properties.maximum) &&
+    properties.gauges.every((gauge) => {
+      const minimum = gauge.minimum ?? properties.neutralValue ?? properties.minimum;
+      const maximum = gauge.maximum ?? properties.maximum;
+      return minimum === undefined || maximum === undefined || minimum < maximum;
+    }),
   ),
   TEXT: z.object({ content: z.string().max(20_000).refine((value) => !/[<>]/.test(value)), format: z.literal('plain').default('plain') }).strict(),
   PANEL: z.object({

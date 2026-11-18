@@ -212,6 +212,7 @@ export class DashboardPanelExecutionService {
       throw new AppError('No fue posible ejecutar el procedimiento autorizado del Panel.', {
         statusCode: 502,
         code: 'DASHBOARD_PANEL_EXECUTION_FAILED',
+        cause: error,
       });
     } finally {
       const remaining = (this.activeExecutions.get(company.id) ?? 1) - 1;

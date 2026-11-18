@@ -321,6 +321,7 @@ describe('Dashboard DTOs', () => {
         properties: {
           xField: 'timestamp',
           yFields: ['total_calls'],
+          xAxisFormat: 'date_time',
           chartMode: 'lines',
           interpolation: 'smooth',
           lineWidth: 2,
@@ -332,6 +333,32 @@ describe('Dashboard DTOs', () => {
     };
 
     expect(createDashboardPanelSchema.safeParse(timeSeriesPanel).success).toBe(true);
+    for (const xAxisFormat of ['date', 'time', 'date_time', 'datetime']) {
+      expect(
+        createDashboardPanelSchema.safeParse({
+          ...timeSeriesPanel,
+          visualizationConfig: {
+            ...timeSeriesPanel.visualizationConfig,
+            properties: {
+              ...timeSeriesPanel.visualizationConfig.properties,
+              xAxisFormat,
+            },
+          },
+        }).success,
+      ).toBe(true);
+    }
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...timeSeriesPanel,
+        visualizationConfig: {
+          ...timeSeriesPanel.visualizationConfig,
+          properties: {
+            ...timeSeriesPanel.visualizationConfig.properties,
+            xAxisFormat: 'invalid',
+          },
+        },
+      }).success,
+    ).toBe(false);
     for (const chartMode of ['lines', 'bars', 'points']) {
       expect(
         createDashboardPanelSchema.safeParse({
@@ -408,12 +435,51 @@ describe('Dashboard DTOs', () => {
             source: 'FIELD',
             field: 'total_calls',
             format: 'number',
+            minimum: 0,
+            maximum: 5,
           }],
         },
       },
     };
 
     expect(createDashboardPanelSchema.safeParse(gaugeGridPanel).success).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...gaugeGridPanel,
+        visualizationConfig: {
+          ...gaugeGridPanel.visualizationConfig,
+          properties: {
+            ...gaugeGridPanel.visualizationConfig.properties,
+            gauges: [{
+              ...gaugeGridPanel.visualizationConfig.properties.gauges[0],
+              minimum: 5,
+              maximum: 2,
+            }],
+          },
+        },
+      }).success,
+    ).toBe(false);
+    for (const invalidRange of [
+      { minimum: 101, maximum: undefined },
+      { minimum: undefined, maximum: 19 },
+    ]) {
+      const range = { ...invalidRange };
+      expect(
+        createDashboardPanelSchema.safeParse({
+          ...gaugeGridPanel,
+          visualizationConfig: {
+            ...gaugeGridPanel.visualizationConfig,
+            properties: {
+              ...gaugeGridPanel.visualizationConfig.properties,
+              gauges: [{
+                ...gaugeGridPanel.visualizationConfig.properties.gauges[0],
+                ...range,
+              }],
+            },
+          },
+        }).success,
+      ).toBe(false);
+    }
     expect(
       createDashboardPanelSchema.safeParse({
         ...gaugeGridPanel,
