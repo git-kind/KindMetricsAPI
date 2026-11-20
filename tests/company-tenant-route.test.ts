@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   getCompanyManagementUserProfile: vi.fn(),
   resolveCompanyByCode: vi.fn(),
   listDashboards: vi.fn(),
+  metadataSchema: vi.fn(),
 }));
 
 vi.mock('../src/Repositories/StoredProcedures/AuthRepository.js', async (importOriginal) => {
@@ -24,6 +25,12 @@ vi.mock('../src/Repositories/CompanyManagementRepository.js', async (importOrigi
 vi.mock('../src/Controllers/DashboardsController.js', () => ({
   dashboardsController: {
     list: mocks.listDashboards,
+  },
+}));
+
+vi.mock('../src/Controllers/DashboardMetadataController.js', () => ({
+  dashboardMetadataController: {
+    schema: mocks.metadataSchema,
   },
 }));
 
@@ -54,6 +61,13 @@ beforeEach(() => {
     errors: [],
     meta: { requestId: request.id },
   }));
+  mocks.metadataSchema.mockImplementation(async (request, reply) => reply.code(200).send({
+    success: true,
+    message: 'Metadata loaded.',
+    data: { tables: [], columns: [], indexes: [], relationships: [] },
+    errors: [],
+    meta: { requestId: request.id },
+  }));
 });
 
 afterEach(() => {
@@ -61,21 +75,38 @@ afterEach(() => {
   else process.env.JWT_SECRET = previousSecret;
 });
 
-describe('Dashboard tenant authorization', () => {
-  it('allows an assigned company and rejects the same route for an unassigned company code', async () => {
+describe('Dashboard central database routing', () => {
+  it('continues past the synchronous KindTech context hook into the metadata handler', async () => {
     const app = await buildApp();
 
     try {
       const token = app.jwt.sign({ sub: 'user-guid', platformAdmin: false });
-      const authorized = await app.inject({
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/dashboard-metadata/schema',
+        headers: { authorization: `Bearer ${token}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(mocks.metadataSchema).toHaveBeenCalledOnce();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('does not require or authorize a company code for the central Dashboard list', async () => {
+    const app = await buildApp();
+
+    try {
+      const token = app.jwt.sign({ sub: 'user-guid', platformAdmin: false });
+      const withoutCompanyCode = await app.inject({
         method: 'GET',
         url: '/api/v1/dashboards',
         headers: {
           authorization: `Bearer ${token}`,
-          'x-company-code': 'AUTHORIZED',
         },
       });
-      const denied = await app.inject({
+      const withCompanyCode = await app.inject({
         method: 'GET',
         url: '/api/v1/dashboards',
         headers: {
@@ -84,11 +115,9 @@ describe('Dashboard tenant authorization', () => {
         },
       });
 
-      expect(authorized.statusCode).toBe(200);
-      expect(denied.statusCode).toBe(403);
-      expect(denied.json().errors[0].code).toBe('COMPANY_ACCESS_DENIED');
-      expect(mocks.companyAccess).toHaveBeenNthCalledWith(1, 'user-guid', authorizedCompanyGuid);
-      expect(mocks.companyAccess).toHaveBeenNthCalledWith(2, 'user-guid', otherCompanyGuid);
+      expect(withoutCompanyCode.statusCode).toBe(200);
+      expect(withCompanyCode.statusCode).toBe(200);
+      expect(mocks.companyAccess).not.toHaveBeenCalled();
     } finally {
       await app.close();
     }
@@ -110,7 +139,6 @@ describe('Dashboard tenant authorization', () => {
         url: '/api/v1/dashboards',
         headers: {
           authorization: `Bearer ${token}`,
-          'x-company-code': 'AUTHORIZED',
         },
       });
 

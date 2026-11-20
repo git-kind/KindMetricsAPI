@@ -33,6 +33,9 @@ export const updateManagedUserSchema = z
     message: 'Debe proporcionar al menos un campo para actualizar.',
   });
 
+export type CreateManagedUserDto = z.infer<typeof createManagedUserSchema>;
+export type UpdateManagedUserDto = z.infer<typeof updateManagedUserSchema>;
+
 export interface ManagedUserDto {
   id: number;
   nombre: string;

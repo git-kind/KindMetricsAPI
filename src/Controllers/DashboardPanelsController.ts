@@ -1,5 +1,4 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { actorId } from '../Repositories/StoredProcedures/ActorRepository.js';
 import { buildErrorResponse, buildSuccessResponse, createError } from '../Helpers/ResponseHelper.js';
 import {
   createDashboardPanelSchema,
@@ -41,7 +40,7 @@ export class DashboardPanelsController {
     if (operation === 'saveLayout') {
       const input = saveDashboardPanelLayoutSchema.safeParse(request.body);
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
-      const data = await service.saveLayout(company, dashboardGuid, tabGuid, input.data.panels, await actorId(request.principal!.sub));
+      const data = await service.saveLayout(company, dashboardGuid, tabGuid, input.data.panels, request.principal!.sub);
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Layout guardado correctamente.'));
     }
     if (operation === 'execute') {
@@ -57,33 +56,32 @@ export class DashboardPanelsController {
       }
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Panel ejecutado correctamente.'));
     }
-    const actor = await actorId(request.principal!.sub);
     if (operation === 'create') {
       const input = createDashboardPanelSchema.safeParse(request.body);
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
-      const data = await service.create(company, dashboardGuid, tabGuid, input.data, actor);
+      const data = await service.create(company, dashboardGuid, tabGuid, input.data, request.principal!.sub);
       return reply.code(201).send(buildSuccessResponse(data, request.id, 'Panel creado correctamente.'));
     }
     if (operation === 'update') {
       const input = updateDashboardPanelSchema.safeParse(request.body);
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
-      const data = await service.update(company, dashboardGuid, tabGuid, panelGuid!, input.data, actor);
+      const data = await service.update(company, dashboardGuid, tabGuid, panelGuid!, input.data, request.principal!.sub);
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Panel actualizado correctamente.'));
     }
     if (operation === 'duplicate') {
-      const data = await service.duplicate(company, dashboardGuid, tabGuid, panelGuid!, actor);
+      const data = await service.duplicate(company, dashboardGuid, tabGuid, panelGuid!, request.principal!.sub);
       return reply.code(201).send(buildSuccessResponse(data, request.id, 'Panel duplicado correctamente.'));
     }
     if (operation === 'move') {
       const input = moveDashboardPanelSchema.safeParse(request.body);
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
-      const data = await service.move(company, dashboardGuid, tabGuid, panelGuid!, input.data, actor);
+      const data = await service.move(company, dashboardGuid, tabGuid, panelGuid!, input.data, request.principal!.sub);
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Panel movido correctamente.'));
     }
     if (operation === 'setStatus') {
       const input = setDashboardPanelStatusSchema.safeParse(request.body);
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
-      const data = await service.setStatus(company, dashboardGuid, tabGuid, panelGuid!, input.data, actor);
+      const data = await service.setStatus(company, dashboardGuid, tabGuid, panelGuid!, input.data, request.principal!.sub);
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Estado de Panel actualizado.'));
     }
     await service.delete(company, dashboardGuid, tabGuid, panelGuid!);

@@ -1,7 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { dashboardsController } from '../Controllers/DashboardsController.js';
-import { authenticate, requireDashboardAdmin, resolveCompany, resolveDashboardReadAccess } from '../Middleware/Security.js';
+import {
+  authenticate,
+  requireKindTechDashboardAdmin,
+  resolveKindTechDashboardReadAccess,
+} from '../Middleware/Security.js';
 import {
   createDashboardSchema,
   dashboardApiResponseSchema,
@@ -13,9 +17,9 @@ import {
   updateDashboardSchema,
 } from '../Models/Dashboards/DashboardDto.js';
 
-const readHooks = [authenticate, resolveCompany, resolveDashboardReadAccess] as const;
-const writeHooks = [authenticate, resolveCompany, requireDashboardAdmin] as const;
-const security = [{ bearerAuth: [], companyCode: [] }];
+const readHooks = [authenticate, resolveKindTechDashboardReadAccess] as const;
+const writeHooks = [authenticate, requireKindTechDashboardAdmin] as const;
+const security = [{ bearerAuth: [] }];
 const tags = ['Dashboards'];
 
 export async function dashboardRoutes(app: FastifyInstance) {

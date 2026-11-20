@@ -8,6 +8,7 @@ import {
 } from '../Models/Dashboards/DashboardPanelDto.js';
 import { DashboardPanelsRepository } from '../Repositories/Dashboards/DashboardPanelsRepository.js';
 import { DashboardProcedureRepository } from '../Repositories/DashboardProcedures/DashboardProcedureRepository.js';
+import { actorId as resolveActorId } from '../Repositories/StoredProcedures/ActorRepository.js';
 
 function persistenceError(error: unknown): never {
   const message = error && typeof error === 'object' && 'sqlMessage' in error && typeof error.sqlMessage === 'string' ? error.sqlMessage : '';
@@ -17,6 +18,11 @@ function persistenceError(error: unknown): never {
     throw new AppError('El Panel solicitado no existe.', { statusCode: 404, code: 'DASHBOARD_PANEL_NOT_FOUND' });
   if (message.includes('DASHBOARD_TAB_NOT_FOUND')) throw new AppError('La Tab solicitada no existe.', { statusCode: 404, code: 'DASHBOARD_TAB_NOT_FOUND' });
   if (message.includes('DASHBOARD_NOT_FOUND')) throw new AppError('El Dashboard solicitado no existe.', { statusCode: 404, code: 'DASHBOARD_NOT_FOUND' });
+  if (message.includes('INVALID_DASHBOARD_PANEL_PROCEDURE'))
+    throw new AppError(
+      'La rutina de Panels de la base KindMetrics está desactualizada. Aplica DataBaseScripts/0011-dashboard-dummy-panels.sql a la base central kindmetrics y reintenta.',
+      { statusCode: 503, code: 'DASHBOARD_PANEL_MIGRATION_REQUIRED' },
+    );
   if (message.includes('INVALID_DASHBOARD_'))
     throw new AppError('Los datos del Panel o del layout no son válidos.', { statusCode: 400, code: 'INVALID_DASHBOARD_PANEL' });
   if (message.includes('DASHBOARD_PANEL_'))
@@ -98,9 +104,10 @@ export class DashboardPanelsService {
       return persistenceError(error);
     }
   }
-  async create(company: CompanyContext, dashboard: string, tab: string, input: CreateDashboardPanelDto, actor: number) {
+  async create(company: CompanyContext, dashboard: string, tab: string, input: CreateDashboardPanelDto, userGuid: string) {
     try {
       await this.validateProcedureMapping(company, input.dashboardProcedureGuid ?? null, input.procedureParams);
+      const actor = await resolveActorId(userGuid);
       const result = await this.repository.create(company, dashboard, tab, input, actor);
       if (!result) throw new AppError('No fue posible crear el Panel.', { code: 'DASHBOARD_PANEL_CREATE_FAILED' });
       return result;
@@ -109,7 +116,7 @@ export class DashboardPanelsService {
       return persistenceError(error);
     }
   }
-  async update(company: CompanyContext, dashboard: string, tab: string, panel: string, input: UpdateDashboardPanelDto, actor: number) {
+  async update(company: CompanyContext, dashboard: string, tab: string, panel: string, input: UpdateDashboardPanelDto, userGuid: string) {
     try {
       if (
         input.dashboardProcedureGuid !== undefined ||
@@ -129,14 +136,9 @@ export class DashboardPanelsService {
             code: 'INVALID_DASHBOARD_PANEL_VISUALIZATION',
           });
         }
-        if (panelType !== 'TEXT' && !procedureGuid) {
-          throw new AppError('Los Paneles que muestran datos requieren un procedimiento autorizado.', {
-            statusCode: 400,
-            code: 'DASHBOARD_PROCEDURE_REQUIRED',
-          });
-        }
         await this.validateProcedureMapping(company, procedureGuid, procedureParams);
       }
+      const actor = await resolveActorId(userGuid);
       const result = await this.repository.update(company, dashboard, tab, panel, input, actor);
       if (!result) throw new AppError('El Panel solicitado no existe.', { statusCode: 404, code: 'DASHBOARD_PANEL_NOT_FOUND' });
       return result;
@@ -145,8 +147,9 @@ export class DashboardPanelsService {
       return persistenceError(error);
     }
   }
-  async duplicate(company: CompanyContext, dashboard: string, tab: string, panel: string, actor: number) {
+  async duplicate(company: CompanyContext, dashboard: string, tab: string, panel: string, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       const result = await this.repository.duplicate(company, dashboard, tab, panel, actor);
       if (!result) throw new AppError('El Panel solicitado no existe.', { statusCode: 404, code: 'DASHBOARD_PANEL_NOT_FOUND' });
       return result;
@@ -155,8 +158,9 @@ export class DashboardPanelsService {
       return persistenceError(error);
     }
   }
-  async move(company: CompanyContext, dashboard: string, tab: string, panel: string, input: MoveDashboardPanelDto, actor: number) {
+  async move(company: CompanyContext, dashboard: string, tab: string, panel: string, input: MoveDashboardPanelDto, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       const result = await this.repository.move(company, dashboard, tab, panel, input, actor);
       if (!result) throw new AppError('No fue posible mover el Panel.', { statusCode: 409, code: 'DASHBOARD_PANEL_MOVE_INVALID' });
       return result;
@@ -171,9 +175,10 @@ export class DashboardPanelsService {
     tab: string,
     panel: string,
     input: { status: 'ACTIVE' | 'INACTIVE'; expectedVersion: number },
-    actor: number,
+    userGuid: string,
   ) {
     try {
+      const actor = await resolveActorId(userGuid);
       const result = await this.repository.setStatus(company, dashboard, tab, panel, input, actor);
       if (!result) throw new AppError('El Panel solicitado no existe.', { statusCode: 404, code: 'DASHBOARD_PANEL_NOT_FOUND' });
       return result;
@@ -191,8 +196,9 @@ export class DashboardPanelsService {
       return persistenceError(error);
     }
   }
-  async saveLayout(company: CompanyContext, dashboard: string, tab: string, panels: unknown, actor: number) {
+  async saveLayout(company: CompanyContext, dashboard: string, tab: string, panels: unknown, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       return await this.repository.saveLayout(company, dashboard, tab, panels, actor);
     } catch (error) {
       return persistenceError(error);

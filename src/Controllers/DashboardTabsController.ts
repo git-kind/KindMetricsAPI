@@ -1,5 +1,4 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { actorId } from '../Repositories/StoredProcedures/ActorRepository.js';
 import { buildErrorResponse, buildSuccessResponse, createError } from '../Helpers/ResponseHelper.js';
 import {
   createDashboardTabSchema,
@@ -36,39 +35,38 @@ export class DashboardTabsController {
       const data = await service.get(company, dashboardGuid, tabGuid!, canManage);
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Tab obtenida correctamente.'));
     }
-    const actor = await actorId(request.principal!.sub);
     if (operation === 'create') {
       const input = createDashboardTabSchema.safeParse(request.body);
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
-      const data = await service.create(company, dashboardGuid, input.data, actor);
+      const data = await service.create(company, dashboardGuid, input.data, request.principal!.sub);
       return reply.code(201).send(buildSuccessResponse(data, request.id, 'Tab creada correctamente.'));
     }
     if (operation === 'reorder') {
       const input = reorderDashboardTabsSchema.safeParse(request.body);
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
-      const data = await service.reorder(company, dashboardGuid, input.data, actor);
+      const data = await service.reorder(company, dashboardGuid, input.data, request.principal!.sub);
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Tabs reordenadas correctamente.'));
     }
     if (operation === 'update') {
       const input = updateDashboardTabSchema.safeParse(request.body);
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
-      const data = await service.update(company, dashboardGuid, tabGuid!, input.data, actor);
+      const data = await service.update(company, dashboardGuid, tabGuid!, input.data, request.principal!.sub);
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Tab actualizada correctamente.'));
     }
     if (operation === 'duplicate') {
       const input = duplicateDashboardTabSchema.safeParse(request.body ?? {});
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
-      const data = await service.duplicate(company, dashboardGuid, tabGuid!, input.data, actor);
+      const data = await service.duplicate(company, dashboardGuid, tabGuid!, input.data, request.principal!.sub);
       return reply.code(201).send(buildSuccessResponse(data, request.id, 'Tab duplicada correctamente.'));
     }
     if (operation === 'setDefault') {
-      const data = await service.setDefault(company, dashboardGuid, tabGuid!, actor);
+      const data = await service.setDefault(company, dashboardGuid, tabGuid!, request.principal!.sub);
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Tab predeterminada actualizada.'));
     }
     if (operation === 'setStatus') {
       const input = setDashboardTabStatusSchema.safeParse(request.body);
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
-      const data = await service.setStatus(company, dashboardGuid, tabGuid!, input.data, actor);
+      const data = await service.setStatus(company, dashboardGuid, tabGuid!, input.data, request.principal!.sub);
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Estado de Tab actualizado.'));
     }
     await service.delete(company, dashboardGuid, tabGuid!);

@@ -1,5 +1,4 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { actorId } from '../Repositories/StoredProcedures/ActorRepository.js';
 import {
   createDashboardSchema,
   dashboardFiltersSchema,
@@ -30,7 +29,7 @@ export class DashboardsController {
     if (!filters.success) {
       return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(filters.error), request.id));
     }
-    const result = await service.list(request.company!, filters.data, request.dashboardCanManage ?? false);
+    const result = await service.list(filters.data, request.dashboardCanManage ?? false);
     return reply
       .code(200)
       .send(
@@ -46,7 +45,7 @@ export class DashboardsController {
   async get(request: FastifyRequest, reply: FastifyReply) {
     const guid = parseGuid(request, reply);
     if (!guid) return reply;
-    const dashboard = await service.get(request.company!, guid, request.dashboardCanManage ?? false);
+    const dashboard = await service.get(guid, request.dashboardCanManage ?? false);
     return reply.code(200).send(buildSuccessResponse(dashboard, request.id, 'Dashboard obtenido correctamente.'));
   }
 
@@ -55,7 +54,7 @@ export class DashboardsController {
     if (!input.success) {
       return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(input.error), request.id));
     }
-    const created = await service.create(request.company!, input.data, await actorId(request.principal!.sub));
+    const created = await service.create(input.data, request.principal!.sub);
     return reply.code(201).send(buildSuccessResponse(created, request.id, 'Dashboard creado correctamente.'));
   }
 
@@ -66,7 +65,7 @@ export class DashboardsController {
     if (!input.success) {
       return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(input.error), request.id));
     }
-    const updated = await service.update(request.company!, guid, input.data, await actorId(request.principal!.sub));
+    const updated = await service.update(guid, input.data, request.principal!.sub);
     return reply.code(200).send(buildSuccessResponse(updated, request.id, 'Dashboard actualizado correctamente.'));
   }
 
@@ -77,7 +76,7 @@ export class DashboardsController {
     if (!input.success) {
       return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(input.error), request.id));
     }
-    const duplicate = await service.duplicate(request.company!, guid, input.data.name, input.data.includePanels, await actorId(request.principal!.sub));
+    const duplicate = await service.duplicate(guid, input.data.name, input.data.includePanels, request.principal!.sub);
     return reply.code(201).send(buildSuccessResponse(duplicate, request.id, 'Dashboard duplicado correctamente.'));
   }
 
@@ -88,14 +87,14 @@ export class DashboardsController {
     if (!input.success) {
       return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(input.error), request.id));
     }
-    const updated = await service.setStatus(request.company!, guid, input.data.status, input.data.expectedVersion, await actorId(request.principal!.sub));
+    const updated = await service.setStatus(guid, input.data.status, input.data.expectedVersion, request.principal!.sub);
     return reply.code(200).send(buildSuccessResponse(updated, request.id, 'Estado del Dashboard actualizado.'));
   }
 
   async delete(request: FastifyRequest, reply: FastifyReply) {
     const guid = parseGuid(request, reply);
     if (!guid) return reply;
-    await service.delete(request.company!, guid);
+    await service.delete(guid);
     return reply.code(204).send();
   }
 }

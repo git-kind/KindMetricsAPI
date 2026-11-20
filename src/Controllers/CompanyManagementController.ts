@@ -10,16 +10,9 @@ import {
   provisionCompanyDatabaseSchema,
   updateCompanySchema,
 } from '../Models/Companies/CompanyManagementDto.js';
-import {
-  createCompany,
-  deactivateCompany,
-  getCompanyManagementUserProfile,
-  getCompanyById,
-  listCompanies,
-  provisionCompanyDatabase,
-  updateCompany,
-} from '../Repositories/CompanyManagementRepository.js';
+import { CompanyManagementService } from '../Services/CompanyManagementService.js';
 
+const service = new CompanyManagementService();
 const responseSchemas = {
   200: companyApiResponseSchema,
   201: companyApiResponseSchema,
@@ -56,7 +49,7 @@ export async function companyManagementRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const perfil = await getCompanyManagementUserProfile(request.principal!.sub);
+      const perfil = await service.getUserProfile(request.principal!.sub);
       if (!perfil) {
         return reply.code(403).send(
           buildErrorResponse(
@@ -83,7 +76,7 @@ export async function companyManagementRoutes(app: FastifyInstance) {
       schema: { tags: ['Company management'], response: responseSchemas },
     },
     async (request, reply) => {
-      const companies = await listCompanies();
+      const companies = await service.list();
       return reply.code(200).send(
         buildSuccessResponse(companies, request.id, 'Empresas obtenidas correctamente.'),
       );
@@ -104,7 +97,7 @@ export async function companyManagementRoutes(app: FastifyInstance) {
         );
       }
 
-      const company = await getCompanyById(params.data.id);
+      const company = await service.getById(params.data.id);
       if (!company) {
         return reply.code(404).send(
           buildErrorResponse(
@@ -155,7 +148,7 @@ export async function companyManagementRoutes(app: FastifyInstance) {
           ),
         );
       }
-      const company = await provisionCompanyDatabase(params.data.id, parsed.data);
+      const company = await service.provisionDatabase(params.data.id, parsed.data);
       return reply.code(201).send(
         buildSuccessResponse(company, request.id, 'Base de datos aprovisionada correctamente.'),
       );
@@ -180,7 +173,7 @@ export async function companyManagementRoutes(app: FastifyInstance) {
         );
       }
 
-      const company = await createCompany(parsed.data);
+      const company = await service.create(parsed.data);
       return reply.code(201).send(
         buildSuccessResponse(company, request.id, 'Empresa registrada. La base de datos está pendiente de aprovisionamiento.'),
       );
@@ -207,7 +200,7 @@ export async function companyManagementRoutes(app: FastifyInstance) {
         );
       }
 
-      const company = await updateCompany(params.data.id, parsed.data);
+      const company = await service.update(params.data.id, parsed.data);
       if (!company) {
         return reply.code(404).send(
           buildErrorResponse(
@@ -237,7 +230,7 @@ export async function companyManagementRoutes(app: FastifyInstance) {
         );
       }
 
-      const company = await deactivateCompany(params.data.id);
+      const company = await service.deactivate(params.data.id);
       if (!company) {
         return reply.code(404).send(
           buildErrorResponse(

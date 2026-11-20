@@ -18,6 +18,7 @@ const migrationFiles = [
   '0008-dashboard-panel-procedure-link.sql',
   '0009-dashboard-duplication-procedure-links.sql',
   '0010-dashboard-time-series.sql',
+  '0011-dashboard-dummy-panels.sql',
 ];
 
 export interface CompanyDatabaseInitializationConfig {

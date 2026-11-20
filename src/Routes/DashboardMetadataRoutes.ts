@@ -1,6 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { dashboardMetadataController } from '../Controllers/DashboardMetadataController.js';
-import { authenticate, requireDashboardAdmin, resolveCompany } from '../Middleware/Security.js';
+import {
+  authenticate,
+  requireKindTechDashboardAdmin,
+  resolveKindTechContext,
+  resolveKindTechDashboardReadAccess,
+} from '../Middleware/Security.js';
 import {
   dashboardMetadataApiResponseSchema,
   dashboardProcedureDiscoveryResponseSchema,
@@ -11,25 +16,26 @@ import {
   validateDashboardProcedureSchema,
 } from '../Models/DashboardMetadata/DashboardMetadataDto.js';
 
-const admin = [authenticate, resolveCompany, requireDashboardAdmin] as const;
-const security = [{ bearerAuth: [], companyCode: [] }];
+const read = [authenticate, resolveKindTechContext, resolveKindTechDashboardReadAccess] as const;
+const write = [authenticate, resolveKindTechContext, requireKindTechDashboardAdmin] as const;
+const security = [{ bearerAuth: [] }];
 const tags = ['Dashboard Metadata'];
 
 export async function dashboardMetadataRoutes(app: FastifyInstance) {
   app.get(
     '/dashboard-metadata/schema',
-    { preHandler: [...admin], schema: { tags, security, querystring: dashboardSchemaQuerySchema, response: { 200: dashboardMetadataApiResponseSchema } } },
+    { preHandler: [...read], schema: { tags, security, querystring: dashboardSchemaQuerySchema, response: { 200: dashboardMetadataApiResponseSchema } } },
     (request, reply) => dashboardMetadataController.schema(request, reply),
   );
   app.get(
     '/dashboard-metadata/procedures',
-    { preHandler: [...admin], schema: { tags, security, response: { 200: dashboardProcedureDiscoveryResponseSchema } } },
+    { preHandler: [...read], schema: { tags, security, response: { 200: dashboardProcedureDiscoveryResponseSchema } } },
     (request, reply) => dashboardMetadataController.discoverProcedures(request, reply),
   );
   app.post(
     '/dashboard-metadata/procedures/validate',
     {
-      preHandler: [...admin],
+      preHandler: [...read],
       schema: { tags, security, body: validateDashboardProcedureSchema, response: { 200: dashboardProcedureValidationResponseSchema } },
     },
     (request, reply) => dashboardMetadataController.validateProcedure(request, reply),
@@ -37,7 +43,7 @@ export async function dashboardMetadataRoutes(app: FastifyInstance) {
   app.post(
     '/dashboard-metadata/procedures/preview',
     {
-      preHandler: [...admin],
+      preHandler: [...write],
       schema: { tags, security, body: dashboardProcedurePreviewSchema, response: { 200: dashboardProcedurePreviewResponseSchema } },
     },
     (request, reply) => dashboardMetadataController.previewProcedure(request, reply),

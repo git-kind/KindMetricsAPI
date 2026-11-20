@@ -2,8 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { entityCreateSchema, entityUpdateSchema, companyCreateSchema, guid } from '../Models/Common.js';
 import { authenticate, resolveCompany, requirePermission } from '../Middleware/Security.js';
 import { EntityService } from '../Services/EntityService.js';
-import { actorId } from '../Repositories/StoredProcedures/ActorRepository.js';
-import type { EntityName } from '../Repositories/StoredProcedures/EntityRepository.js';
+import type { EntityName } from '../Models/EntityDto.js';
 import { buildErrorResponse, buildSuccessResponse, createError } from '../Helpers/ResponseHelper.js';
 // Keep one explicit entry per resource; split it into its own component if its contract diverges.
 const entityModules: { entity: EntityName; global: boolean }[] = [
@@ -49,7 +48,7 @@ export async function entityRoutes(app: FastifyInstance) {
         const issues = result.error.issues.map((issue) => createError('VALIDATION_ERROR', issue.message, issue.path.join('.')));
         return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues, request.id));
       }
-      const created = (await service.create(companyId(request), result.data, await actorId(request.principal!.sub)))[0];
+      const created = (await service.create(companyId(request), result.data, request.principal!.sub))[0];
       return reply.code(201).send(buildSuccessResponse(created, request.id, `${entity} creado correctamente.`));
     });
     app.patch(`${base}/:guid`, { preHandler: writeHooks, schema: { tags: [entity], body: entityUpdateSchema } }, async (request, reply) => {
@@ -63,7 +62,7 @@ export async function entityRoutes(app: FastifyInstance) {
         const issues = body.error.issues.map((issue) => createError('VALIDATION_ERROR', issue.message, issue.path.join('.')));
         return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues, request.id));
       }
-      const rows = await service.update(id.data, companyId(request), body.data, await actorId(request.principal!.sub));
+      const rows = await service.update(id.data, companyId(request), body.data, request.principal!.sub);
       if (!rows[0])
         return reply.code(404).send(buildErrorResponse('Recurso no encontrado.', [createError('NOT_FOUND', 'El recurso solicitado no existe.')], request.id));
       return reply.code(200).send(buildSuccessResponse(rows[0], request.id, `${entity} actualizado correctamente.`));
@@ -74,7 +73,7 @@ export async function entityRoutes(app: FastifyInstance) {
         return reply
           .code(400)
           .send(buildErrorResponse('Identificador inválido.', [createError('INVALID_GUID', 'El guid especificado no es válido.', 'guid')], request.id));
-      const rows = await service.delete(id.data, companyId(request), await actorId(request.principal!.sub));
+      const rows = await service.delete(id.data, companyId(request), request.principal!.sub);
       if (!rows[0])
         return reply.code(404).send(buildErrorResponse('Recurso no encontrado.', [createError('NOT_FOUND', 'El recurso solicitado no existe.')], request.id));
       return reply.code(200).send(buildSuccessResponse(rows[0], request.id, `${entity} eliminado correctamente.`));

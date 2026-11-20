@@ -13,6 +13,30 @@ declare module 'fastify' {
 
 const companyCodePattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/;
 
+export async function resolveKindTechContext(request: FastifyRequest): Promise<void> {
+  request.company = {
+    guid: '00000000-0000-4000-8000-000000000000',
+    id: 0,
+    code: 'KINDTECH',
+  };
+}
+
+export async function resolveKindTechDashboardReadAccess(request: FastifyRequest): Promise<void> {
+  request.dashboardCanManage = request.principal?.platformAdmin === true;
+}
+
+export async function requireKindTechDashboardAdmin(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (!request.principal?.platformAdmin) {
+    reply.code(403).send(buildErrorResponse(
+      'Acceso denegado.',
+      [createError('PERMISSION_DENIED', 'Solo la administración de KindTech puede modificar Dashboards.')],
+      request.id,
+    ));
+    return;
+  }
+  request.dashboardCanManage = true;
+}
+
 export async function authenticate(request: FastifyRequest, reply: FastifyReply) {
   try {
     const token = await request.jwtVerify<Principal & { tokenType?: string }>();

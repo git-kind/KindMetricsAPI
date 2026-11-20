@@ -1,6 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { dashboardTabsController } from '../Controllers/DashboardTabsController.js';
-import { authenticate, requireDashboardAdmin, resolveCompany, resolveDashboardReadAccess } from '../Middleware/Security.js';
+import {
+  authenticate,
+  requireKindTechDashboardAdmin,
+  resolveKindTechContext,
+  resolveKindTechDashboardReadAccess,
+} from '../Middleware/Security.js';
 import {
   createDashboardTabSchema,
   dashboardTabListQuerySchema,
@@ -13,9 +18,9 @@ import {
   updateDashboardTabSchema,
 } from '../Models/Dashboards/DashboardTabDto.js';
 
-const read = [authenticate, resolveCompany, resolveDashboardReadAccess] as const;
-const write = [authenticate, resolveCompany, requireDashboardAdmin] as const;
-const security = [{ bearerAuth: [], companyCode: [] }];
+const read = [authenticate, resolveKindTechContext, resolveKindTechDashboardReadAccess] as const;
+const write = [authenticate, resolveKindTechContext, requireKindTechDashboardAdmin] as const;
+const security = [{ bearerAuth: [] }];
 const tags = ['Dashboard Tabs'];
 
 export async function dashboardTabsRoutes(app: FastifyInstance) {

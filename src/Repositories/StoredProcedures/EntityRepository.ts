@@ -1,5 +1,6 @@
 import { callRows } from './ProcedureExecutor.js';
-export type EntityName = 'companies' | 'roles' | 'catalogs' | 'datasources' | 'folders' | 'dashboards' | 'panels' | 'settings';
+import type { EntityName } from '../../Models/EntityDto.js';
+export type { EntityName } from '../../Models/EntityDto.js';
 export class EntityRepository {
   constructor(private readonly entity: EntityName) {}
   list(companyId: number | null) { return callRows<Record<string, unknown>>(`sp_${this.entity}_list`, [companyId]); }

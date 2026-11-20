@@ -1,6 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { dashboardPanelsController } from '../Controllers/DashboardPanelsController.js';
-import { authenticate, requireDashboardAdmin, resolveCompany, resolveDashboardReadAccess } from '../Middleware/Security.js';
+import {
+  authenticate,
+  requireKindTechDashboardAdmin,
+  resolveCompany,
+  resolveDashboardReadAccess,
+  resolveKindTechContext,
+  resolveKindTechDashboardReadAccess,
+} from '../Middleware/Security.js';
 import {
   createDashboardPanelSchema,
   dashboardPanelExecutionApiResponseSchema,
@@ -16,16 +23,18 @@ import {
   executeDashboardPanelSchema,
 } from '../Models/Dashboards/DashboardPanelDto.js';
 
-const read = [authenticate, resolveCompany, resolveDashboardReadAccess] as const;
-const write = [authenticate, resolveCompany, requireDashboardAdmin] as const;
-const security = [{ bearerAuth: [], companyCode: [] }];
+const centralRead = [authenticate, resolveKindTechContext, resolveKindTechDashboardReadAccess] as const;
+const centralWrite = [authenticate, resolveKindTechContext, requireKindTechDashboardAdmin] as const;
+const execute = [authenticate, resolveCompany, resolveDashboardReadAccess] as const;
+const security = [{ bearerAuth: [] }];
+const executionSecurity = [{ bearerAuth: [], companyCode: [] }];
 const tags = ['Dashboard Panels'];
 
 export async function dashboardPanelsRoutes(app: FastifyInstance) {
   app.put(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels/layout',
     {
-      preHandler: [...write],
+      preHandler: [...centralWrite],
       schema: {
         tags,
         security,
@@ -39,7 +48,7 @@ export async function dashboardPanelsRoutes(app: FastifyInstance) {
   app.get(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels',
     {
-      preHandler: [...read],
+      preHandler: [...centralRead],
       schema: {
         tags,
         security,
@@ -52,16 +61,16 @@ export async function dashboardPanelsRoutes(app: FastifyInstance) {
   );
   app.get(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels/:panelGuid',
-    { preHandler: [...read], schema: { tags, security, params: dashboardPanelGuidParamsSchema, response: { 200: dashboardPanelApiResponseSchema } } },
+    { preHandler: [...centralRead], schema: { tags, security, params: dashboardPanelGuidParamsSchema, response: { 200: dashboardPanelApiResponseSchema } } },
     (req, reply) => dashboardPanelsController.handle('get', req, reply),
   );
   app.post(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels/:panelGuid/execute',
     {
-      preHandler: [...read],
+      preHandler: [...centralWrite],
       schema: {
         tags,
-        security,
+        security: executionSecurity,
         params: dashboardPanelGuidParamsSchema,
         body: executeDashboardPanelSchema,
         response: { 200: dashboardPanelExecutionApiResponseSchema },
@@ -72,7 +81,7 @@ export async function dashboardPanelsRoutes(app: FastifyInstance) {
   app.post(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels',
     {
-      preHandler: [...write],
+      preHandler: [...centralWrite],
       schema: { tags, security, params: dashboardPanelParamsSchema, body: createDashboardPanelSchema, response: { 201: dashboardPanelApiResponseSchema } },
     },
     (req, reply) => dashboardPanelsController.handle('create', req, reply),
@@ -80,25 +89,25 @@ export async function dashboardPanelsRoutes(app: FastifyInstance) {
   app.patch(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels/:panelGuid',
     {
-      preHandler: [...write],
+      preHandler: [...centralWrite],
       schema: { tags, security, params: dashboardPanelGuidParamsSchema, body: updateDashboardPanelSchema, response: { 200: dashboardPanelApiResponseSchema } },
     },
     (req, reply) => dashboardPanelsController.handle('update', req, reply),
   );
   app.delete(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels/:panelGuid',
-    { preHandler: [...write], schema: { tags, security, params: dashboardPanelGuidParamsSchema } },
+    { preHandler: [...centralWrite], schema: { tags, security, params: dashboardPanelGuidParamsSchema } },
     (req, reply) => dashboardPanelsController.handle('delete', req, reply),
   );
   app.post(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels/:panelGuid/duplicate',
-    { preHandler: [...write], schema: { tags, security, params: dashboardPanelGuidParamsSchema, response: { 201: dashboardPanelApiResponseSchema } } },
+    { preHandler: [...centralWrite], schema: { tags, security, params: dashboardPanelGuidParamsSchema, response: { 201: dashboardPanelApiResponseSchema } } },
     (req, reply) => dashboardPanelsController.handle('duplicate', req, reply),
   );
   app.patch(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels/:panelGuid/move',
     {
-      preHandler: [...write],
+      preHandler: [...centralWrite],
       schema: { tags, security, params: dashboardPanelGuidParamsSchema, body: moveDashboardPanelSchema, response: { 200: dashboardPanelApiResponseSchema } },
     },
     (req, reply) => dashboardPanelsController.handle('move', req, reply),
@@ -106,7 +115,7 @@ export async function dashboardPanelsRoutes(app: FastifyInstance) {
   app.patch(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels/:panelGuid/status',
     {
-      preHandler: [...write],
+      preHandler: [...execute],
       schema: {
         tags,
         security,

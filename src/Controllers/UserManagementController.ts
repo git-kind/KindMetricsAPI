@@ -1,6 +1,4 @@
 import type { FastifyInstance } from 'fastify';
-import argon2 from 'argon2';
-import { AppError } from '../Errors/AppError.js';
 import { buildErrorResponse, buildSuccessResponse, createError } from '../Helpers/ResponseHelper.js';
 import { authenticate } from '../Middleware/Security.js';
 import { requireCompanyManagementProfile } from '../Middleware/CompanyManagementAccess.js';
@@ -9,35 +7,14 @@ import {
   updateManagedUserSchema,
   userManagementIdParamsSchema,
 } from '../Models/Users/UserManagementDto.js';
-import {
-  createManagedUser,
-  deactivateManagedUser,
-  getManagedUserById,
-  isManagedUserEmailTaken,
-  listManagedUsers,
-  updateManagedUser,
-} from '../Repositories/UserManagementRepository.js';
+import { UserManagementService } from '../Services/UserManagementService.js';
+
+const service = new UserManagementService();
 
 function validationErrors(error: { issues: { message: string; path: PropertyKey[] }[] }) {
   return error.issues.map((issue) =>
     createError('VALIDATION_ERROR', issue.message, issue.path.join('.')),
   );
-}
-
-function throwDuplicateEmail(error: unknown): never {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'ER_DUP_ENTRY'
-  ) {
-    throw new AppError('Ya existe un usuario con ese correo electrónico.', {
-      statusCode: 409,
-      code: 'USER_EMAIL_ALREADY_EXISTS',
-      field: 'email',
-    });
-  }
-  throw error;
 }
 
 export async function userManagementRoutes(app: FastifyInstance) {
@@ -48,7 +25,7 @@ export async function userManagementRoutes(app: FastifyInstance) {
     '/users/management',
     { preHandler: readHooks, schema: { tags: ['User management'] } },
     async (request, reply) => {
-      const users = await listManagedUsers();
+      const users = await service.list();
       return reply.code(200).send(
         buildSuccessResponse(users, request.id, 'Usuarios obtenidos correctamente.'),
       );
@@ -70,7 +47,7 @@ export async function userManagementRoutes(app: FastifyInstance) {
         );
       }
 
-      const user = await getManagedUserById(params.data.id);
+      const user = await service.getById(params.data.id);
       if (!user) {
         return reply.code(404).send(
           buildErrorResponse(
@@ -100,33 +77,20 @@ export async function userManagementRoutes(app: FastifyInstance) {
           ),
         );
       }
-      if (await isManagedUserEmailTaken(parsed.data.email)) {
-        return reply.code(409).send(
-          buildErrorResponse(
-            'Conflicto de negocio.',
-            [createError('USER_EMAIL_ALREADY_EXISTS', 'Ya existe un usuario con ese correo electrónico.', 'email')],
-            request.id,
-          ),
-        );
-      }
-
       try {
-        const user = await createManagedUser({
-          nombre: parsed.data.nombre,
-          email: parsed.data.email,
-          perfil: parsed.data.perfil,
-          passwordHash: await argon2.hash(parsed.data.password),
-        });
-        if (!user) {
-          throw new AppError('No se pudo recuperar el usuario recién creado.', {
-            code: 'USER_CREATE_FAILED',
-          });
-        }
+        const user = await service.create(parsed.data);
         return reply.code(201).send(
           buildSuccessResponse(user, request.id, 'Usuario creado correctamente.'),
         );
       } catch (error) {
-        return throwDuplicateEmail(error);
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'USER_EMAIL_ALREADY_EXISTS') {
+          return reply.code(409).send(buildErrorResponse(
+            'Conflicto de negocio.',
+            [createError('USER_EMAIL_ALREADY_EXISTS', 'Ya existe un usuario con ese correo electrónico.', 'email')],
+            request.id,
+          ));
+        }
+        throw error;
       }
     },
   );
@@ -147,25 +111,8 @@ export async function userManagementRoutes(app: FastifyInstance) {
         );
       }
 
-      if (parsed.data.email && (await isManagedUserEmailTaken(parsed.data.email, params.data.id))) {
-        return reply.code(409).send(
-          buildErrorResponse(
-            'Conflicto de negocio.',
-            [createError('USER_EMAIL_ALREADY_EXISTS', 'Ya existe un usuario con ese correo electrónico.', 'email')],
-            request.id,
-          ),
-        );
-      }
-
       try {
-        const user = await updateManagedUser(params.data.id, {
-          ...(parsed.data.nombre !== undefined ? { nombre: parsed.data.nombre } : {}),
-          ...(parsed.data.email !== undefined ? { email: parsed.data.email } : {}),
-          ...(parsed.data.perfil !== undefined ? { perfil: parsed.data.perfil } : {}),
-          ...(parsed.data.password !== undefined
-            ? { passwordHash: await argon2.hash(parsed.data.password) }
-            : {}),
-        });
+        const user = await service.update(params.data.id, parsed.data);
         if (!user) {
           return reply.code(404).send(
             buildErrorResponse(
@@ -179,7 +126,14 @@ export async function userManagementRoutes(app: FastifyInstance) {
           buildSuccessResponse(user, request.id, 'Usuario actualizado correctamente.'),
         );
       } catch (error) {
-        return throwDuplicateEmail(error);
+        if (error && typeof error === 'object' && 'code' in error && error.code === 'USER_EMAIL_ALREADY_EXISTS') {
+          return reply.code(409).send(buildErrorResponse(
+            'Conflicto de negocio.',
+            [createError('USER_EMAIL_ALREADY_EXISTS', 'Ya existe un usuario con ese correo electrónico.', 'email')],
+            request.id,
+          ));
+        }
+        throw error;
       }
     },
   );
@@ -198,21 +152,17 @@ export async function userManagementRoutes(app: FastifyInstance) {
           ),
         );
       }
-      if (params.data.id === 1) {
-        const user = await getManagedUserById(params.data.id);
-        if (user?.email.toLowerCase() === 'admin@kindtech.com') {
-          return reply.code(403).send(
-            buildErrorResponse(
-              'Acceso denegado.',
-              [createError('SYSTEM_ADMIN_PROTECTED', 'El usuario Administrador del Sistema está protegido.')],
-              request.id,
-            ),
-          );
-        }
+      const result = await service.deactivate(params.data.id);
+      if (result.protected) {
+        return reply.code(403).send(
+          buildErrorResponse(
+            'Acceso denegado.',
+            [createError('SYSTEM_ADMIN_PROTECTED', 'El usuario Administrador del Sistema está protegido.')],
+            request.id,
+          ),
+        );
       }
-
-      const deactivated = await deactivateManagedUser(params.data.id);
-      if (!deactivated) {
+      if (!result.deactivated) {
         return reply.code(404).send(
           buildErrorResponse(
             'Usuario no encontrado.',

@@ -7,6 +7,7 @@ import type {
   SetDashboardTabStatusDto,
   UpdateDashboardTabDto,
 } from '../Models/Dashboards/DashboardTabDto.js';
+import { actorId as resolveActorId } from '../Repositories/StoredProcedures/ActorRepository.js';
 import { DashboardTabsRepository } from '../Repositories/Dashboards/DashboardTabsRepository.js';
 
 function persistenceError(error: unknown): never {
@@ -41,8 +42,9 @@ export class DashboardTabsService {
       return persistenceError(error);
     }
   }
-  async create(company: CompanyContext, dashboard: string, input: CreateDashboardTabDto, actor: number) {
+  async create(company: CompanyContext, dashboard: string, input: CreateDashboardTabDto, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       const result = await this.repository.create(company, dashboard, input, actor);
       if (!result) throw new AppError('No fue posible crear la Tab.', { code: 'DASHBOARD_TAB_CREATE_FAILED' });
       return result;
@@ -51,8 +53,9 @@ export class DashboardTabsService {
       return persistenceError(error);
     }
   }
-  async update(company: CompanyContext, dashboard: string, tab: string, input: UpdateDashboardTabDto, actor: number) {
+  async update(company: CompanyContext, dashboard: string, tab: string, input: UpdateDashboardTabDto, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       const result = await this.repository.update(company, dashboard, tab, input, actor);
       if (!result) throw new AppError('La Tab solicitada no existe.', { statusCode: 404, code: 'DASHBOARD_TAB_NOT_FOUND' });
       return result;
@@ -61,8 +64,9 @@ export class DashboardTabsService {
       return persistenceError(error);
     }
   }
-  async duplicate(company: CompanyContext, dashboard: string, tab: string, input: DuplicateDashboardTabDto, actor: number) {
+  async duplicate(company: CompanyContext, dashboard: string, tab: string, input: DuplicateDashboardTabDto, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       const result = await this.repository.duplicate(company, dashboard, tab, input, actor);
       if (!result) throw new AppError('La Tab solicitada no existe.', { statusCode: 404, code: 'DASHBOARD_TAB_NOT_FOUND' });
       return result;
@@ -71,15 +75,17 @@ export class DashboardTabsService {
       return persistenceError(error);
     }
   }
-  async reorder(company: CompanyContext, dashboard: string, input: ReorderDashboardTabsDto, actor: number) {
+  async reorder(company: CompanyContext, dashboard: string, input: ReorderDashboardTabsDto, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       return await this.repository.reorder(company, dashboard, input, actor);
     } catch (error) {
       return persistenceError(error);
     }
   }
-  async setDefault(company: CompanyContext, dashboard: string, tab: string, actor: number) {
+  async setDefault(company: CompanyContext, dashboard: string, tab: string, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       const result = await this.repository.setDefault(company, dashboard, tab, actor);
       if (!result) throw new AppError('La Tab solicitada no existe.', { statusCode: 404, code: 'DASHBOARD_TAB_NOT_FOUND' });
       return result;
@@ -88,8 +94,9 @@ export class DashboardTabsService {
       return persistenceError(error);
     }
   }
-  async setStatus(company: CompanyContext, dashboard: string, tab: string, input: SetDashboardTabStatusDto, actor: number) {
+  async setStatus(company: CompanyContext, dashboard: string, tab: string, input: SetDashboardTabStatusDto, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       const result = await this.repository.setStatus(company, dashboard, tab, input, actor);
       if (!result) throw new AppError('La Tab solicitada no existe.', { statusCode: 404, code: 'DASHBOARD_TAB_NOT_FOUND' });
       return result;

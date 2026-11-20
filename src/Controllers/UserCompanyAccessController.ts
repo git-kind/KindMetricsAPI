@@ -8,10 +8,9 @@ import {
   userCompanyAccessUpdateApiResponseSchema,
   updateUserCompanyAccessSchema,
 } from '../Models/Companies/UserCompanyAccessDto.js';
-import {
-  listUserCompanyAccess,
-  replaceUserCompanyAccess,
-} from '../Repositories/UserCompanyAccessRepository.js';
+import { UserCompanyAccessService } from '../Services/UserCompanyAccessService.js';
+
+const service = new UserCompanyAccessService();
 
 function validationErrors(error: { issues: { message: string; path: PropertyKey[] }[] }) {
   return error.issues.map((issue) =>
@@ -36,7 +35,7 @@ export async function userCompanyAccessRoutes(app: FastifyInstance) {
       },
     },
     async (request, reply) => {
-      const access = await listUserCompanyAccess();
+      const access = await service.listUserCompanyAccess();
       return reply.code(200).send(
         buildSuccessResponse(
           access,
@@ -75,7 +74,7 @@ export async function userCompanyAccessRoutes(app: FastifyInstance) {
         );
       }
 
-      const user = await replaceUserCompanyAccess(
+      const user = await service.replaceUserCompanyAccess(
         params.data.userGuid,
         body.data.companyIds,
       );

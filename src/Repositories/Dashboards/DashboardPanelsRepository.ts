@@ -6,7 +6,7 @@ import type {
   MoveDashboardPanelDto,
   UpdateDashboardPanelDto,
 } from '../../Models/Dashboards/DashboardPanelDto.js';
-import { CompanyDatabaseRepository } from '../CompanyDatabaseRepository.js';
+import { KindTechDatabaseRepository } from '../KindTechDatabaseRepository.js';
 
 type PanelRow = RowDataPacket & Record<string, unknown>;
 
@@ -54,7 +54,7 @@ function toPanel(row: PanelRow): DashboardPanelResponseDto {
 }
 
 export class DashboardPanelsRepository {
-  constructor(private readonly database = new CompanyDatabaseRepository()) {}
+  constructor(private readonly database = new KindTechDatabaseRepository()) {}
 
   async list(
     company: CompanyContext,

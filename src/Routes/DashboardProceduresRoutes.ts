@@ -1,6 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 import { dashboardProceduresController } from '../Controllers/DashboardProceduresController.js';
-import { authenticate, requireDashboardAdmin, resolveCompany } from '../Middleware/Security.js';
+import {
+  authenticate,
+  requireKindTechDashboardAdmin,
+  resolveKindTechContext,
+  resolveKindTechDashboardReadAccess,
+} from '../Middleware/Security.js';
 import {
   createDashboardProcedureSchema,
   dashboardProcedureApiResponseSchema,
@@ -9,20 +14,21 @@ import {
   updateDashboardProcedureSchema,
 } from '../Models/DashboardProcedures/DashboardProcedureDto.js';
 
-const admin = [authenticate, resolveCompany, requireDashboardAdmin] as const;
-const security = [{ bearerAuth: [], companyCode: [] }];
+const read = [authenticate, resolveKindTechContext, resolveKindTechDashboardReadAccess] as const;
+const write = [authenticate, resolveKindTechContext, requireKindTechDashboardAdmin] as const;
+const security = [{ bearerAuth: [] }];
 const tags = ['Dashboard Procedures'];
 
 export async function dashboardProceduresRoutes(app: FastifyInstance) {
   app.get(
     '/dashboard-procedures',
-    { preHandler: [...admin], schema: { tags, security, response: { 200: dashboardProcedureListApiResponseSchema } } },
+    { preHandler: [...read], schema: { tags, security, response: { 200: dashboardProcedureListApiResponseSchema } } },
     (request, reply) => dashboardProceduresController.list(request, reply),
   );
   app.get(
     '/dashboard-procedures/:guid',
     {
-      preHandler: [...admin],
+      preHandler: [...read],
       schema: { tags, security, params: dashboardProcedureGuidParamsSchema, response: { 200: dashboardProcedureApiResponseSchema } },
     },
     (request, reply) => dashboardProceduresController.get(request, reply),
@@ -30,7 +36,7 @@ export async function dashboardProceduresRoutes(app: FastifyInstance) {
   app.post(
     '/dashboard-procedures',
     {
-      preHandler: [...admin],
+      preHandler: [...write],
       schema: { tags, security, body: createDashboardProcedureSchema, response: { 201: dashboardProcedureApiResponseSchema } },
     },
     (request, reply) => dashboardProceduresController.create(request, reply),
@@ -38,7 +44,7 @@ export async function dashboardProceduresRoutes(app: FastifyInstance) {
   app.patch(
     '/dashboard-procedures/:guid',
     {
-      preHandler: [...admin],
+      preHandler: [...write],
       schema: {
         tags,
         security,
@@ -51,7 +57,7 @@ export async function dashboardProceduresRoutes(app: FastifyInstance) {
   );
   app.delete(
     '/dashboard-procedures/:guid',
-    { preHandler: [...admin], schema: { tags, security, params: dashboardProcedureGuidParamsSchema } },
+    { preHandler: [...write], schema: { tags, security, params: dashboardProcedureGuidParamsSchema } },
     (request, reply) => dashboardProceduresController.delete(request, reply),
   );
 }

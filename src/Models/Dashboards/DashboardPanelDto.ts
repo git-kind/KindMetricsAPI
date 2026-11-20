@@ -201,9 +201,15 @@ const visualizationPropertiesSchemas = {
   TIME_SERIES: z.object({
     xField: fieldName,
     yFields: z.array(fieldName).min(1).max(32),
+    series: z.array(z.object({
+      field: fieldName,
+      name: z.string().max(100).optional(),
+      color: color.optional(),
+      unit: z.string().max(40).optional(),
+    }).strict()).max(32).optional(),
     legend: z.boolean().optional(),
     xAxisFormat: z.enum(['date', 'time', 'date_time', 'datetime']).optional(),
-    chartMode: z.enum(['lines', 'bars', 'points']).optional(),
+    chartMode: z.enum(['lines', 'bars', 'points', 'step_fills']).optional(),
     interpolation: z.enum(['linear', 'smooth', 'step-start', 'step-end']).optional(),
     lineWidth: z.number().int().min(0).max(10).optional(),
     fillOpacity: z.number().int().min(0).max(100).optional(),
@@ -305,8 +311,8 @@ export function validPanelVisualizationConfig(panelTypeName: string, config: z.i
 }
 
 const procedureAssociationSchema = (panel: { panelType: string; dashboardProcedureGuid?: string | null; procedureParams?: unknown }) => {
-  if (panel.panelType === 'TEXT') return true;
-  return Boolean(panel.dashboardProcedureGuid) && procedureParamsSchema.safeParse(panel.procedureParams).success;
+  if (panel.panelType === 'TEXT' || !panel.dashboardProcedureGuid) return true;
+  return procedureParamsSchema.safeParse(panel.procedureParams).success;
 };
 
 const gridSchema = z
@@ -439,7 +445,9 @@ export const updateDashboardPanelSchema = z
     (panel) =>
       panel.panelType === undefined ||
       panel.panelType === 'TEXT' ||
-      panel.dashboardProcedureGuid === undefined || (panel.dashboardProcedureGuid !== null && panel.procedureParams != null),
+      panel.dashboardProcedureGuid === undefined ||
+      panel.dashboardProcedureGuid === null ||
+      panel.procedureParams != null,
     {
       path: ['dashboardProcedureGuid'],
       message: 'Al cambiar a un Panel con datos se requiere un procedimiento autorizado y su definición de parámetros.',

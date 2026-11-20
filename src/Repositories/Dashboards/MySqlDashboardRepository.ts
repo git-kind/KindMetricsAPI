@@ -1,8 +1,7 @@
 import type { RowDataPacket } from 'mysql2';
 import { AppError } from '../../Errors/AppError.js';
-import type { CompanyContext } from '../../Models/Common.js';
 import type { CreateDashboardDto, DashboardFiltersDto, DashboardResponseDto, UpdateDashboardDto } from '../../Models/Dashboards/DashboardDto.js';
-import { CompanyDatabaseRepository } from '../CompanyDatabaseRepository.js';
+import { KindTechDatabaseRepository } from '../KindTechDatabaseRepository.js';
 import type { DashboardRepository } from './DashboardRepository.js';
 
 type DashboardRow = RowDataPacket & {
@@ -111,21 +110,22 @@ function translatePersistenceError(error: unknown): never {
 }
 
 export class MySqlDashboardRepository implements DashboardRepository {
-  constructor(private readonly database = new CompanyDatabaseRepository()) {}
+  constructor(private readonly database = new KindTechDatabaseRepository()) {}
 
-  async list(company: CompanyContext, filters: DashboardFiltersDto, includeInactive: boolean) {
+  async list(filters: DashboardFiltersDto, includeInactive: boolean) {
+    const params = [
+      filters.search ?? null,
+      filters.folderId ?? null,
+      filters.status ?? null,
+      filters.tags ? JSON.stringify(filters.tags) : null,
+      filters.page,
+      filters.pageSize,
+      filters.sortBy,
+      filters.sortDirection,
+      includeInactive ? 1 : 0,
+    ];
     try {
-      const sets = await this.database.callResultSets<DashboardRow>(company, 'sp_dashboard_list', [
-        filters.search ?? null,
-        filters.folderId ?? null,
-        filters.status ?? null,
-        filters.tags ? JSON.stringify(filters.tags) : null,
-        filters.page,
-        filters.pageSize,
-        filters.sortBy,
-        filters.sortDirection,
-        includeInactive ? 1 : 0,
-      ]);
+      const sets = await this.database.callCentralResultSets<DashboardRow>('sp_dashboard_list', params);
       const dashboards = (sets[0] ?? []).map(toDashboard);
       const total = Number(sets[1]?.[0]?.total_count ?? 0);
       return { dashboards, total };
@@ -134,18 +134,18 @@ export class MySqlDashboardRepository implements DashboardRepository {
     }
   }
 
-  async get(company: CompanyContext, guid: string, includeInactive: boolean) {
+  async get(guid: string, includeInactive: boolean) {
     try {
-      const rows = await this.database.callRows<DashboardRow>(company, 'sp_dashboard_get', [guid, includeInactive ? 1 : 0]);
+      const rows = await this.database.callCentralRows<DashboardRow>('sp_dashboard_get', [guid, includeInactive ? 1 : 0]);
       return rows[0] ? toDashboard(rows[0]) : undefined;
     } catch (error) {
       return translatePersistenceError(error);
     }
   }
 
-  async create(company: CompanyContext, input: CreateDashboardDto, actorId: number) {
+  async create(input: CreateDashboardDto, actorId: number) {
     try {
-      const rows = await this.database.callRows<DashboardRow>(company, 'sp_dashboard_create', [
+      const rows = await this.database.callCentralRows<DashboardRow>('sp_dashboard_create', [
         input.name,
         input.description ?? null,
         input.folderId ?? null,
@@ -165,37 +165,46 @@ export class MySqlDashboardRepository implements DashboardRepository {
     }
   }
 
-  async update(company: CompanyContext, guid: string, input: UpdateDashboardDto, actorId: number) {
+  async update(guid: string, input: UpdateDashboardDto, actorId: number) {
     try {
       const { expectedVersion, ...properties } = input;
-      const rows = await this.database.callRows<DashboardRow>(company, 'sp_dashboard_update', [guid, JSON.stringify(properties), expectedVersion, actorId]);
+      const rows = await this.database.callCentralRows<DashboardRow>(
+        'sp_dashboard_update',
+        [guid, JSON.stringify(properties), expectedVersion, actorId],
+      );
       return rows[0] ? toDashboard(rows[0]) : undefined;
     } catch (error) {
       return translatePersistenceError(error);
     }
   }
 
-  async duplicate(company: CompanyContext, guid: string, name: string | undefined, includePanels: boolean, actorId: number) {
+  async duplicate(guid: string, name: string | undefined, includePanels: boolean, actorId: number) {
     try {
-      const rows = await this.database.callRows<DashboardRow>(company, 'sp_dashboard_duplicate', [guid, name ?? null, includePanels ? 1 : 0, actorId]);
+      const rows = await this.database.callCentralRows<DashboardRow>(
+        'sp_dashboard_duplicate',
+        [guid, name ?? null, includePanels ? 1 : 0, actorId],
+      );
       return rows[0] ? toDashboard(rows[0]) : undefined;
     } catch (error) {
       return translatePersistenceError(error);
     }
   }
 
-  async setStatus(company: CompanyContext, guid: string, status: 'ACTIVE' | 'INACTIVE', expectedVersion: number, actorId: number) {
+  async setStatus(guid: string, status: 'ACTIVE' | 'INACTIVE', expectedVersion: number, actorId: number) {
     try {
-      const rows = await this.database.callRows<DashboardRow>(company, 'sp_dashboard_set_status', [guid, status, expectedVersion, actorId]);
+      const rows = await this.database.callCentralRows<DashboardRow>(
+        'sp_dashboard_set_status',
+        [guid, status, expectedVersion, actorId],
+      );
       return rows[0] ? toDashboard(rows[0]) : undefined;
     } catch (error) {
       return translatePersistenceError(error);
     }
   }
 
-  async delete(company: CompanyContext, guid: string) {
+  async delete(guid: string) {
     try {
-      const rows = await this.database.callRows<RowDataPacket>(company, 'sp_dashboard_delete', [guid]);
+      const rows = await this.database.callCentralRows<RowDataPacket>('sp_dashboard_delete', [guid]);
       return rows.length > 0;
     } catch (error) {
       return translatePersistenceError(error);

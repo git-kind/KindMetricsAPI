@@ -9,7 +9,7 @@ afterEach(() => {
 });
 
 describe('Dashboard routes', () => {
-  it('documents the dashboard endpoints and requires authentication and company context', async () => {
+  it('documents the dashboard endpoints and requires authentication without company context', async () => {
     process.env.JWT_SECRET = 'test-secret-with-more-than-32-bytes';
     const app = await buildApp();
 
@@ -32,25 +32,10 @@ describe('Dashboard routes', () => {
       expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs'].get.responses['200']).toBeDefined();
       expect(openapi.paths['/api/v1/dashboards'].get.responses['503']).toBeDefined();
       expect(openapi.components.securitySchemes.companyCode.name).toBe('x-company-code');
+      expect(openapi.paths['/api/v1/dashboards'].get.security).toEqual([{ bearerAuth: [] }]);
 
       const unauthenticated = await app.inject({ method: 'GET', url: '/api/v1/dashboards' });
       expect(unauthenticated.statusCode).toBe(401);
-
-      const token = app.jwt.sign({ sub: 'platform-user', platformAdmin: true });
-      const missingCompany = await app.inject({
-        method: 'GET',
-        url: '/api/v1/dashboards',
-        headers: { authorization: `Bearer ${token}` },
-      });
-      expect(missingCompany.statusCode).toBe(400);
-      expect(missingCompany.json().errors[0].code).toBe('COMPANY_CODE_REQUIRED');
-      const metadataMissingCompany = await app.inject({
-        method: 'GET',
-        url: '/api/v1/dashboard-metadata/schema',
-        headers: { authorization: 'Bearer ' + token },
-      });
-      expect(metadataMissingCompany.statusCode).toBe(400);
-      expect(metadataMissingCompany.json().errors[0].code).toBe('COMPANY_CODE_REQUIRED');
     } finally {
       await app.close();
     }

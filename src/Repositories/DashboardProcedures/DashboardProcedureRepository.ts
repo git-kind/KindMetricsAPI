@@ -5,7 +5,7 @@ import type {
   DashboardProcedureResponseDto,
   UpdateDashboardProcedureDto,
 } from '../../Models/DashboardProcedures/DashboardProcedureDto.js';
-import { CompanyDatabaseRepository } from '../CompanyDatabaseRepository.js';
+import { KindTechDatabaseRepository } from '../KindTechDatabaseRepository.js';
 
 type ProcedureRow = RowDataPacket & Record<string, unknown>;
 
@@ -35,7 +35,7 @@ function toProcedure(row: ProcedureRow): DashboardProcedureResponseDto {
 }
 
 export class DashboardProcedureRepository {
-  constructor(private readonly database = new CompanyDatabaseRepository()) {}
+  constructor(private readonly database = new KindTechDatabaseRepository()) {}
 
   async syncDiscoveredProcedure(
     company: CompanyContext,

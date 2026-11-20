@@ -2,6 +2,7 @@ import type { RowDataPacket } from 'mysql2';
 import type { CompanyContext } from '../../Models/Common.js';
 import type { ProcedureResultColumn } from '../../Database/SqlExecutor.js';
 import { CompanyDatabaseRepository, type ProcedureParameter } from '../CompanyDatabaseRepository.js';
+import { KindTechDatabaseRepository } from '../KindTechDatabaseRepository.js';
 
 export type DashboardPanelExecutionConfig = {
   panelGuid: string;
@@ -23,11 +24,14 @@ export type DashboardPanelExecutionConfig = {
 type ExecutionConfigRow = RowDataPacket & Record<string, unknown>;
 
 export class DashboardPanelExecutionRepository {
-  constructor(private readonly database = new CompanyDatabaseRepository()) {}
+  constructor(
+    private readonly catalogDatabase = new KindTechDatabaseRepository(),
+    private readonly companyDatabase = new CompanyDatabaseRepository(),
+  ) {}
 
   async getConfig(company: CompanyContext, dashboardGuid: string, tabGuid: string, panelGuid: string) {
     const row = (
-      await this.database.callRows<ExecutionConfigRow>(company, 'sp_dashboard_panel_execution_get', [dashboardGuid, tabGuid, panelGuid])
+      await this.catalogDatabase.callRows<ExecutionConfigRow>(company, 'sp_dashboard_panel_execution_get', [dashboardGuid, tabGuid, panelGuid])
     )[0];
     if (!row) return undefined;
     const parse = (value: unknown) => (typeof value === 'string' ? (JSON.parse(value) as unknown) : value);
@@ -56,6 +60,6 @@ export class DashboardPanelExecutionRepository {
     timeoutSeconds: number,
   ): Promise<{ resultSets: RowDataPacket[][]; columns: ProcedureResultColumn[] }> {
     if (!/^sp_dash_[a-zA-Z0-9_]{1,112}$/.test(procedureName)) throw new Error('Invalid authorized procedure name');
-    return this.database.executeReadOnlyProcedureWithMetadata(company, procedureName, parameters, timeoutSeconds);
+    return this.companyDatabase.executeReadOnlyProcedureWithMetadata(company, procedureName, parameters, timeoutSeconds);
   }
 }

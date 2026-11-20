@@ -3,6 +3,7 @@ import type { CompanyContext } from '../Models/Common.js';
 import type { CreateDashboardProcedureDto, UpdateDashboardProcedureDto } from '../Models/DashboardProcedures/DashboardProcedureDto.js';
 import { DashboardMetadataRepository } from '../Repositories/DashboardMetadataRepository.js';
 import { DashboardProcedureRepository } from '../Repositories/DashboardProcedures/DashboardProcedureRepository.js';
+import { actorId as resolveActorId } from '../Repositories/StoredProcedures/ActorRepository.js';
 
 function persistenceError(error: unknown): never {
   const message = error && typeof error === 'object' && 'sqlMessage' in error && typeof error.sqlMessage === 'string' ? error.sqlMessage : '';
@@ -25,8 +26,9 @@ export class DashboardProceduresService {
     private readonly metadataRepository = new DashboardMetadataRepository(),
   ) {}
 
-  async list(company: CompanyContext, actor: number) {
+  async list(company: CompanyContext, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       const discovered = await this.metadataRepository.discoverProcedures(company);
       for (const procedure of discovered) {
         if (procedure.executable && /^sp_dash_[a-zA-Z0-9_]{1,112}$/.test(procedure.procedureName)) {
@@ -62,8 +64,9 @@ export class DashboardProceduresService {
     }
   }
 
-  async create(company: CompanyContext, input: CreateDashboardProcedureDto, actor: number) {
+  async create(company: CompanyContext, input: CreateDashboardProcedureDto, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       const procedure = await this.repository.create(company, input, actor);
       if (!procedure) throw new AppError('No se pudo registrar el procedimiento.', { code: 'DASHBOARD_PROCEDURE_CREATE_FAILED' });
       return procedure;
@@ -73,8 +76,9 @@ export class DashboardProceduresService {
     }
   }
 
-  async update(company: CompanyContext, guid: string, input: UpdateDashboardProcedureDto, actor: number) {
+  async update(company: CompanyContext, guid: string, input: UpdateDashboardProcedureDto, userGuid: string) {
     try {
+      const actor = await resolveActorId(userGuid);
       const procedure = await this.repository.update(company, guid, input, actor);
       if (!procedure) throw new AppError('El procedimiento autorizado no existe.', { statusCode: 404, code: 'DASHBOARD_PROCEDURE_NOT_FOUND' });
       return procedure;

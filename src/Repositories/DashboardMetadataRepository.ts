@@ -2,7 +2,7 @@ import type { RowDataPacket } from 'mysql2';
 import type { CompanyContext } from '../Models/Common.js';
 import { AppError } from '../Errors/AppError.js';
 import type { DashboardSchemaQueryDto } from '../Models/DashboardMetadata/DashboardMetadataDto.js';
-import { CompanyDatabaseRepository } from './CompanyDatabaseRepository.js';
+import { KindTechDatabaseRepository } from './KindTechDatabaseRepository.js';
 
 type MetadataRow = RowDataPacket & Record<string, unknown>;
 
@@ -54,7 +54,7 @@ function routineParamMode(value: unknown): 'IN' | 'OUT' | 'INOUT' {
 }
 
 export class DashboardMetadataRepository {
-  constructor(private readonly database = new CompanyDatabaseRepository()) {}
+  constructor(private readonly database = new KindTechDatabaseRepository()) {}
 
   async schema(company: CompanyContext, query: DashboardSchemaQueryDto) {
     const tableFilter = query.tableName ?? null;
@@ -218,7 +218,7 @@ export class DashboardMetadataRepository {
        WHERE procedure_name = ? AND status = 'ACTIVE'`,
       [JSON.stringify(resultSchema), procedureName],
     );
-    if (result.affectedRows !== 1) {
+    if ((result as { affectedRows?: number }).affectedRows !== 1) {
       throw new AppError('No se pudo guardar el esquema porque el procedimiento no está activo en el catálogo.', {
         statusCode: 409,
         code: 'DASHBOARD_PROCEDURE_NOT_ACTIVE',

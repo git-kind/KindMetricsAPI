@@ -4,6 +4,10 @@ import type { DashboardMetadataRepository } from '../src/Repositories/DashboardM
 import type { DashboardProcedureRepository } from '../src/Repositories/DashboardProcedures/DashboardProcedureRepository.js';
 import { DashboardProceduresService } from '../src/Services/DashboardProceduresService.js';
 
+vi.mock('../src/Repositories/StoredProcedures/ActorRepository.js', () => ({
+  actorId: vi.fn().mockResolvedValue(42),
+}));
+
 const company: CompanyContext = {
   id: 8,
   guid: 'e23c9c24-39ba-48cf-9f22-4fc6a52ff3dd',
@@ -49,7 +53,7 @@ describe('Dashboard procedures service', () => {
     } as unknown as DashboardProcedureRepository;
     const service = new DashboardProceduresService(repository, metadataRepository);
 
-    await service.list(company, 42);
+    await service.list(company, 'user-guid');
 
     expect(repository.syncDiscoveredProcedure).toHaveBeenCalledTimes(3);
     expect(repository.syncDiscoveredProcedure).toHaveBeenCalledWith(

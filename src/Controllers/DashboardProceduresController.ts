@@ -5,7 +5,6 @@ import {
   dashboardProcedureGuidParamsSchema,
   updateDashboardProcedureSchema,
 } from '../Models/DashboardProcedures/DashboardProcedureDto.js';
-import { actorId } from '../Repositories/StoredProcedures/ActorRepository.js';
 import { DashboardProceduresService } from '../Services/DashboardProceduresService.js';
 
 const service = new DashboardProceduresService();
@@ -16,7 +15,7 @@ function validationErrors(error: { issues: { message: string; path: PropertyKey[
 
 export class DashboardProceduresController {
   async list(request: FastifyRequest, reply: FastifyReply) {
-    const data = await service.list(request.company!, await actorId(request.principal!.sub));
+    const data = await service.list(request.company!, request.principal!.sub);
     return reply.code(200).send(buildSuccessResponse(data, request.id, 'Stored Procedures compatibles obtenidos correctamente.'));
   }
 
@@ -30,7 +29,7 @@ export class DashboardProceduresController {
   async create(request: FastifyRequest, reply: FastifyReply) {
     const input = createDashboardProcedureSchema.safeParse(request.body);
     if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(input.error), request.id));
-    const data = await service.create(request.company!, input.data, await actorId(request.principal!.sub));
+    const data = await service.create(request.company!, input.data, request.principal!.sub);
     return reply.code(201).send(buildSuccessResponse(data, request.id, 'Stored Procedure registrado correctamente.'));
   }
 
@@ -39,7 +38,7 @@ export class DashboardProceduresController {
     if (!params.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(params.error), request.id));
     const input = updateDashboardProcedureSchema.safeParse(request.body);
     if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(input.error), request.id));
-    const data = await service.update(request.company!, params.data.guid, input.data, await actorId(request.principal!.sub));
+    const data = await service.update(request.company!, params.data.guid, input.data, request.principal!.sub);
     return reply.code(200).send(buildSuccessResponse(data, request.id, 'Stored Procedure actualizado correctamente.'));
   }
 

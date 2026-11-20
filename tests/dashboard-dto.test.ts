@@ -194,7 +194,12 @@ describe('Dashboard DTOs', () => {
         visualizationConfig: { schemaVersion: 1, properties: { content: '<script>alert(1)</script>' } },
       }).success,
     ).toBe(false);
-    expect(createDashboardPanelSchema.safeParse({ ...textPanel, panelType: 'NUMBER', dashboardProcedureGuid: null }).success).toBe(false);
+    expect(createDashboardPanelSchema.safeParse({
+      ...textPanel,
+      panelType: 'NUMBER',
+      dashboardProcedureGuid: null,
+      visualizationConfig: { schemaVersion: 1, properties: { valueField: 'total_calls' } },
+    }).success).toBe(true);
     expect(
       createDashboardPanelSchema.safeParse({
         ...textPanel,
@@ -321,6 +326,10 @@ describe('Dashboard DTOs', () => {
         properties: {
           xField: 'timestamp',
           yFields: ['total_calls'],
+          series: [
+            { field: 'total_calls', color: '#5470C6' },
+            { field: 'completed_calls', color: '#91CC75', unit: 'calls' },
+          ],
           xAxisFormat: 'date_time',
           chartMode: 'lines',
           interpolation: 'smooth',
@@ -359,7 +368,7 @@ describe('Dashboard DTOs', () => {
         },
       }).success,
     ).toBe(false);
-    for (const chartMode of ['lines', 'bars', 'points']) {
+    for (const chartMode of ['lines', 'bars', 'points', 'step_fills']) {
       expect(
         createDashboardPanelSchema.safeParse({
           ...timeSeriesPanel,

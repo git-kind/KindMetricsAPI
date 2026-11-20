@@ -8,7 +8,7 @@ import type {
   SetDashboardTabStatusDto,
   UpdateDashboardTabDto,
 } from '../../Models/Dashboards/DashboardTabDto.js';
-import { CompanyDatabaseRepository } from '../CompanyDatabaseRepository.js';
+import { KindTechDatabaseRepository } from '../KindTechDatabaseRepository.js';
 
 type TabRow = RowDataPacket & Record<string, unknown>;
 
@@ -33,7 +33,7 @@ function toTab(row: TabRow): DashboardTabResponseDto {
 }
 
 export class DashboardTabsRepository {
-  constructor(private readonly database = new CompanyDatabaseRepository()) {}
+  constructor(private readonly database = new KindTechDatabaseRepository()) {}
 
   async list(company: CompanyContext, dashboardGuid: string, status: 'ACTIVE' | 'INACTIVE' | undefined, canManage: boolean) {
     const rows = await this.database.callRows<TabRow>(company, 'sp_dashboard_tab_list', [dashboardGuid, status ?? null]);

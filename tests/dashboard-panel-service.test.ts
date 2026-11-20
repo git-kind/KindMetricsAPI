@@ -5,6 +5,10 @@ import type { DashboardPanelsRepository } from '../src/Repositories/Dashboards/D
 import type { DashboardProcedureRepository } from '../src/Repositories/DashboardProcedures/DashboardProcedureRepository.js';
 import { DashboardPanelsService } from '../src/Services/DashboardPanelsService.js';
 
+vi.mock('../src/Repositories/StoredProcedures/ActorRepository.js', () => ({
+  actorId: vi.fn().mockResolvedValue(11),
+}));
+
 const company: CompanyContext = { id: 7, guid: 'e23c9c24-39ba-48cf-9f22-4fc6a52ff3dd', code: 'DEV' };
 const dashboardGuid = '94e4562a-0f47-420f-963d-f137fa7b8858';
 const tabGuid = '117a615c-e7f0-4c6a-9bcb-6d89239fa7cb';
@@ -57,8 +61,57 @@ describe('Dashboard Panel Service', () => {
       gridH: 4,
     });
 
-    await expect(service.create(company, dashboardGuid, tabGuid, input, 11)).resolves.toEqual({ guid: panelGuid });
+    await expect(service.create(company, dashboardGuid, tabGuid, input, 'user-guid')).resolves.toEqual({ guid: panelGuid });
     expect(panelsRepository.create).toHaveBeenCalledWith(company, dashboardGuid, tabGuid, input, 11);
+  });
+
+  it('creates and updates a Dummy data Panel without a procedure', async () => {
+    const dummyVisualizationConfig = {
+      schemaVersion: 1 as const,
+      properties: {
+        xField: 'timestamp',
+        yFields: ['total_calls'],
+        series: [{ field: 'total_calls', color: '#5470C6' }],
+        chartMode: 'lines',
+      },
+    };
+    const panelsRepository = {
+      create: vi.fn().mockResolvedValue({ guid: panelGuid }),
+      get: vi.fn().mockResolvedValue({
+        guid: panelGuid,
+        panelType: 'TIME_SERIES',
+        dashboardProcedureGuid: null,
+        procedureParams: null,
+        visualizationConfig: dummyVisualizationConfig,
+      }),
+      update: vi.fn().mockResolvedValue({ guid: panelGuid }),
+    } as unknown as DashboardPanelsRepository;
+    const proceduresRepository = {
+      get: vi.fn(),
+    } as unknown as DashboardProcedureRepository;
+    const service = new DashboardPanelsService(panelsRepository, proceduresRepository);
+    const input = createDashboardPanelSchema.parse({
+      title: 'Dummy time series',
+      panelType: 'TIME_SERIES',
+      dashboardProcedureGuid: null,
+      visualizationConfig: dummyVisualizationConfig,
+      gridX: 0,
+      gridY: 0,
+      gridW: 6,
+      gridH: 3,
+    });
+
+    await expect(service.create(company, dashboardGuid, tabGuid, input, 'user-guid'))
+      .resolves.toEqual({ guid: panelGuid });
+    const update = updateDashboardPanelSchema.parse({
+      dashboardProcedureGuid: null,
+      procedureParams: null,
+      visualizationConfig: dummyVisualizationConfig,
+      expectedVersion: 1,
+    });
+    await expect(service.update(company, dashboardGuid, tabGuid, panelGuid, update, 'user-guid'))
+      .resolves.toEqual({ guid: panelGuid });
+    expect(proceduresRepository.get).not.toHaveBeenCalled();
   });
 
   it('rejects Panel mappings that do not match the stored procedure contract', async () => {
@@ -88,7 +141,7 @@ describe('Dashboard Panel Service', () => {
       gridH: 4,
     });
 
-    const result = service.create(company, dashboardGuid, tabGuid, input, 11);
+    const result = service.create(company, dashboardGuid, tabGuid, input, 'user-guid');
     await expect(result).rejects.toMatchObject({
       code: 'DASHBOARD_PANEL_PARAMETER_CONTRACT_MISMATCH',
       statusCode: 400,
@@ -118,7 +171,7 @@ describe('Dashboard Panel Service', () => {
       expectedVersion: 1,
     });
 
-    await expect(service.update(company, dashboardGuid, tabGuid, panelGuid, input, 11)).resolves.toBe(currentPanel);
+    await expect(service.update(company, dashboardGuid, tabGuid, panelGuid, input, 'user-guid')).resolves.toBe(currentPanel);
     expect(panelsRepository.update).toHaveBeenCalledOnce();
   });
 });
