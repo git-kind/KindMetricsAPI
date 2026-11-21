@@ -168,6 +168,13 @@ const visualizationPropertiesSchemas = {
     }).strict()).min(1).max(256),
     pagination: z.object({ enabled: z.boolean(), pageSize: z.number().int().min(1).max(500) }).strict().optional(),
     sorting: z.object({ enabled: z.boolean(), fields: z.array(fieldName).max(256) }).strict().optional(),
+    showHeader: z.boolean().optional(),
+    frozenColumns: z.number().int().min(0).max(256).optional(),
+    cellHeight: z.enum(['small', 'medium', 'large']).optional(),
+    maxHeight: z.number().int().min(120).max(2000).optional(),
+    minColumnWidth: z.number().int().min(60).max(2000).optional(),
+    wrapText: z.boolean().optional(),
+    columnAlignment: z.enum(['auto', 'left', 'center', 'right']).optional(),
   }).strict(),
   LINE: z.object({
     xField: fieldName,
