@@ -66,6 +66,43 @@ function connectionOptions(config: CompanyDatabaseInitializationConfig): Connect
   };
 }
 
+function translateCredentialValidationError(error: unknown): never {
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+
+  if (code === 'ER_ACCESS_DENIED_ERROR') {
+    throw new AppError('MySQL rechazó las credenciales configuradas para la base de datos de la empresa.', {
+      statusCode: 422,
+      code: 'COMPANY_DATABASE_CREDENTIALS_INVALID',
+    });
+  }
+
+  if (code === 'ER_BAD_DB_ERROR') {
+    throw new AppError('La base de datos configurada para la empresa no existe o no está disponible.', {
+      statusCode: 422,
+      code: 'COMPANY_DATABASE_NOT_FOUND',
+    });
+  }
+
+  if (code === 'ER_DBACCESS_DENIED_ERROR') {
+    throw new AppError('El usuario configurado no tiene acceso a la base de datos de la empresa.', {
+      statusCode: 422,
+      code: 'COMPANY_DATABASE_ACCESS_DENIED',
+    });
+  }
+
+  if (
+    typeof code === 'string' &&
+    ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EHOSTUNREACH', 'ECONNRESET', 'PROTOCOL_CONNECTION_LOST'].includes(code)
+  ) {
+    throw new AppError('No fue posible conectar con la base de datos configurada para la empresa.', {
+      statusCode: 503,
+      code: 'COMPANY_DATABASE_UNAVAILABLE',
+    });
+  }
+
+  throw error;
+}
+
 export function splitSqlStatements(script: string): string[] {
   let delimiter = ';';
   let buffer = '';
@@ -99,6 +136,31 @@ export class CompanyDatabaseInitializer {
     private readonly createConnection: ConnectionFactory = mysql.createConnection,
     private readonly migrationDirectory = getMigrationDirectory(),
   ) {}
+
+  async validateCredentials(config: CompanyDatabaseInitializationConfig): Promise<void> {
+    let connection: Connection | undefined;
+    try {
+      connection = await this.createConnection(connectionOptions(config));
+      const [identityRows] = await connection.query<(RowDataPacket & { database_name: string })[]>(
+        'SELECT DATABASE() AS database_name',
+      );
+      if (identityRows[0]?.database_name !== config.database) {
+        throw new AppError('La conexión no corresponde a la base de datos de la empresa.', {
+          statusCode: 422,
+          code: 'COMPANY_DATABASE_NOT_FOUND',
+        });
+      }
+    } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      translateCredentialValidationError(error);
+    } finally {
+      if (connection) {
+        await connection.end();
+      }
+    }
+  }
 
   async initialize(config: CompanyDatabaseInitializationConfig): Promise<void> {
     const connection = await this.createConnection(connectionOptions(config));

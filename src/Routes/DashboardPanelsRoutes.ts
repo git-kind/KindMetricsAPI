@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { dashboardPanelsController } from '../Controllers/DashboardPanelsController.js';
-import { authenticate, requireDashboardAdmin, resolveCompany, resolveDashboardReadAccess } from '../Middleware/Security.js';
+import { authenticate, resolveDashboardCompany } from '../Middleware/Security.js';
+import { authorizeRoles } from '../Middleware/RoleAuthorization.js';
 import {
   createDashboardPanelSchema,
   dashboardPanelExecutionApiResponseSchema,
@@ -16,8 +17,8 @@ import {
   executeDashboardPanelSchema,
 } from '../Models/Dashboards/DashboardPanelDto.js';
 
-const read = [authenticate, resolveCompany, resolveDashboardReadAccess] as const;
-const write = [authenticate, resolveCompany, requireDashboardAdmin] as const;
+const read = [authenticate, authorizeRoles(['Admin', 'Editor', 'Viewer']), resolveDashboardCompany] as const;
+const write = [authenticate, authorizeRoles(['Admin', 'Editor']), resolveDashboardCompany] as const;
 const security = [{ bearerAuth: [], companyCode: [] }];
 const tags = ['Dashboard Panels'];
 

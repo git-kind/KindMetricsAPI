@@ -39,8 +39,8 @@ export async function authRoutes(app: FastifyInstance) {
         .code(401)
         .send(buildErrorResponse('Credenciales inválidas.', [createError('INVALID_CREDENTIALS', 'El correo o la contraseña son incorrectos.')], request.id));
     }
-    const token = app.jwt.sign({ sub: user.sub, platformAdmin: user.platformAdmin, tokenType: 'access' }, { expiresIn: '15m' });
-    const refreshToken = app.jwt.sign({ sub: user.sub, platformAdmin: user.platformAdmin, tokenType: 'refresh' }, { expiresIn: '30d' });
+    const token = app.jwt.sign({ sub: user.sub, platformAdmin: user.platformAdmin, role: user.role, tokenType: 'access' }, { expiresIn: '25m' });
+    const refreshToken = app.jwt.sign({ sub: user.sub, platformAdmin: user.platformAdmin, role: user.role, tokenType: 'refresh' }, { expiresIn: '30d' });
     reply.setCookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'prod',
@@ -51,8 +51,15 @@ export async function authRoutes(app: FastifyInstance) {
     const payload: LoginResponseDto = {
       accessToken: token,
       tokenType: 'Bearer',
-      expiresIn: 900,
-      user: { guid: user.sub, email: user.email, name: user.name, platformAdmin: user.platformAdmin },
+      expiresIn: 1500,
+      user: {
+        guid: user.sub,
+        email: user.email,
+        name: user.name,
+        platformAdmin: user.platformAdmin,
+        role: user.role,
+        perfil: user.role,
+      },
     };
     return reply.code(200).send(buildSuccessResponse(payload, request.id, 'Inicio de sesión exitoso.'));
   });
@@ -120,7 +127,7 @@ export async function authRoutes(app: FastifyInstance) {
         .send(buildErrorResponse('No autorizado.', [createError('UNAUTHORIZED', 'La sesión expiró. Inicia sesión nuevamente.')], request.id));
     }
 
-    let claims: { sub: string; platformAdmin: boolean; tokenType: string };
+    let claims: { sub: string; platformAdmin: boolean; role?: string; tokenType: string };
     try {
       claims = app.jwt.verify(refreshToken);
     } catch {
@@ -145,8 +152,8 @@ export async function authRoutes(app: FastifyInstance) {
         .send(buildErrorResponse('No autorizado.', [createError('UNAUTHORIZED', 'La sesión expiró. Inicia sesión nuevamente.')], request.id));
     }
 
-    const accessToken = app.jwt.sign({ sub: user.sub, platformAdmin: user.platformAdmin, tokenType: 'access' }, { expiresIn: '15m' });
-    const rotatedRefreshToken = app.jwt.sign({ sub: user.sub, platformAdmin: user.platformAdmin, tokenType: 'refresh' }, { expiresIn: '30d' });
+    const accessToken = app.jwt.sign({ sub: user.sub, platformAdmin: user.platformAdmin, role: user.role, tokenType: 'access' }, { expiresIn: '25m' });
+    const rotatedRefreshToken = app.jwt.sign({ sub: user.sub, platformAdmin: user.platformAdmin, role: user.role, tokenType: 'refresh' }, { expiresIn: '30d' });
     reply.setCookie('refreshToken', rotatedRefreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'prod',
@@ -159,12 +166,14 @@ export async function authRoutes(app: FastifyInstance) {
         {
           accessToken,
           tokenType: 'Bearer',
-          expiresIn: 900,
+          expiresIn: 1500,
           user: {
             guid: user.sub,
             email: user.email,
             name: user.name,
             platformAdmin: user.platformAdmin,
+            role: user.role,
+            perfil: user.role,
           },
         },
         request.id,
@@ -180,7 +189,13 @@ export async function authRoutes(app: FastifyInstance) {
         .code(404)
         .send(buildErrorResponse('Usuario no encontrado.', [createError('USER_NOT_FOUND', 'El usuario autenticado no existe.')], request.id));
     }
-    const payload: CurrentUserResponseDto = { guid: user.guid, email: user.email, name: user.name, platformAdmin: user.platformAdmin };
+    const payload: CurrentUserResponseDto = {
+      guid: user.guid,
+      email: user.email,
+      name: user.name,
+      platformAdmin: user.platformAdmin,
+      role: user.role,
+    };
     return reply.code(200).send(buildSuccessResponse(payload, request.id, 'Perfil cargado correctamente.'));
   });
 }

@@ -3,11 +3,29 @@ import { randomInt } from 'node:crypto';
 import { byEmail, byGuid } from '../Repositories/StoredProcedures/AuthRepository.js';
 import { getPasswordRecoveryTokenByEmail, requestPasswordRecoveryToken, resetPasswordWithRecoveryToken } from '../Repositories/StoredProcedures/PasswordRecoveryRepository.js';
 import { AppError } from '../Errors/AppError.js';
+import { normalizeUserRole } from '../Models/Auth/UserRole.js';
+import { getCompanyManagementUserProfile } from '../Repositories/CompanyManagementRepository.js';
+import type { DbUser } from '../Repositories/StoredProcedures/AuthRepository.js';
 
 // IMPORTACIÓN CORRECTA DE TU FUNCIÓN DE ENVÍO DE CORREO
 import { enviarCorreoRecuperacion } from './EmailService.js';
 
 const otpTtlMinutes = 10;
+
+async function getUserRole(user: DbUser) {
+  const role = user.is_platform_admin
+    ? 'Admin'
+    : normalizeUserRole(user.role) ??
+      normalizeUserRole(user.perfil) ??
+      (await getCompanyManagementUserProfile(user.guid));
+  if (!role) {
+    throw new AppError('El perfil de la cuenta no es válido.', {
+      statusCode: 500,
+      code: 'USER_ROLE_INVALID',
+    });
+  }
+  return role;
+}
 
 function getPasswordRecoveryUrl(email: string): string {
   const configuredBaseUrl = process.env.APP_BASE_URL?.trim();
@@ -49,24 +67,35 @@ export class AuthService {
     const user = await byEmail(email.toLowerCase());
     const status = user?.status.trim().toUpperCase();
     if (!user || (status !== 'ACTIVE' && status !== 'ACTIVO') || !(await argon2.verify(user.password_hash, password))) return null;
-    return { sub: user.guid, platformAdmin: Boolean(user.is_platform_admin), email: user.email, name: user.name };
+    const role = await getUserRole(user);
+    return { sub: user.guid, platformAdmin: Boolean(user.is_platform_admin), email: user.email, name: user.name, role };
   }
 
   async refreshSession(guid: string) {
     const user = await byGuid(guid);
     const status = user?.status.trim().toUpperCase();
     if (!user || (status !== 'ACTIVE' && status !== 'ACTIVO')) return null;
+    const role = await getUserRole(user);
     return {
       sub: user.guid,
       platformAdmin: Boolean(user.is_platform_admin),
       email: user.email,
       name: user.name,
+      role,
     };
   }
 
   async me(guid: string) {
     const user = await byGuid(guid);
-    return user ? { guid: user.guid, email: user.email, name: user.name, platformAdmin: Boolean(user.is_platform_admin) } : null;
+    return user
+      ? {
+          guid: user.guid,
+          email: user.email,
+          name: user.name,
+          platformAdmin: Boolean(user.is_platform_admin),
+          role: await getUserRole(user),
+        }
+      : null;
   }
 
   async requestPasswordRecovery(email: string) {

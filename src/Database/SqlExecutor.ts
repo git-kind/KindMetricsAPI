@@ -95,7 +95,7 @@ export async function executeReadOnlyQuery(
   });
   try {
     await connection.query('SET SESSION TRANSACTION READ ONLY');
-    await connection.query('SET SESSION MAX_EXECUTION_TIME=5000');
+    await connection.query('SET SESSION MAX_EXECUTION_TIME=1500000');
     const [rows] = await connection.execute(sql, params);
     return rows;
   } finally {

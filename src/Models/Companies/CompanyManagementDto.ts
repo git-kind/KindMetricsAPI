@@ -42,8 +42,23 @@ export const updateCompanySchema = z
     direccion: z.string().trim().max(255).nullable().optional(),
     telefono: z.string().trim().max(50).nullable().optional(),
     estado: companyStatusSchema.optional(),
+    database_name: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_$-]+$/).optional(),
+    database_user: z.string().trim().min(1).max(32).optional(),
+    database_password: z.string().min(1).max(512).optional(),
   })
   .strict()
+  .refine((data) => {
+    const connectionFields = [
+      data.database_name,
+      data.database_user,
+      data.database_password,
+    ];
+    return connectionFields.every((field) => field === undefined)
+      || connectionFields.every((field) => field !== undefined);
+  }, {
+    message: 'Debe proporcionar nombre, usuario y contraseña para actualizar la conexión.',
+    path: ['database_password'],
+  })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'Debe proporcionar al menos un campo para actualizar.',
   });
@@ -96,7 +111,8 @@ export const companyManagementAccessResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   data: z.object({
-    perfil: z.enum(['Admin', 'Visor']),
+    perfil: z.enum(['Admin', 'Editor', 'Viewer']),
+    role: z.enum(['Admin', 'Editor', 'Viewer']),
     canManage: z.boolean(),
   }).nullable(),
   errors: z.array(apiErrorSchema),

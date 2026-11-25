@@ -1,5 +1,16 @@
 import { callRows } from './ProcedureExecutor.js';
-export type DbUser = { id: number; guid: string; email: string; name: string; password_hash: string; is_platform_admin: number; status: string };
+import type { UserRole } from '../../Models/Auth/UserRole.js';
+export type DbUser = {
+  id: number;
+  guid: string;
+  email: string;
+  name: string;
+  password_hash: string;
+  is_platform_admin: number;
+  status: string;
+  perfil?: string;
+  role?: UserRole | string;
+};
 
 export async function byEmail(email: string) {
   return (await callRows<DbUser>('sp_auth_by_email', [email]))[0];

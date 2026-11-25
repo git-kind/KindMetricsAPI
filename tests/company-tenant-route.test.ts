@@ -46,7 +46,7 @@ beforeEach(() => {
   mocks.companyAccess.mockImplementation(async (_userGuid: string, companyGuid: string) =>
     companyGuid === authorizedCompanyGuid ? { id: 8 } : undefined,
   );
-  mocks.getCompanyManagementUserProfile.mockResolvedValue('Visor');
+  mocks.getCompanyManagementUserProfile.mockResolvedValue('Editor');
   mocks.listDashboards.mockImplementation(async (request, reply) => reply.code(200).send({
     success: true,
     message: 'Dashboards obtenidos correctamente.',
@@ -62,33 +62,57 @@ afterEach(() => {
 });
 
 describe('Dashboard tenant authorization', () => {
-  it('allows an assigned company and rejects the same route for an unassigned company code', async () => {
+  it('allows Editor dashboard access across active companies without changing other access checks', async () => {
     const app = await buildApp();
 
     try {
-      const token = app.jwt.sign({ sub: 'user-guid', platformAdmin: false });
+      const token = app.jwt.sign({ sub: 'user-guid', platformAdmin: false, role: 'Editor' });
       const authorized = await app.inject({
         method: 'GET',
         url: '/api/v1/dashboards',
         headers: {
-          authorization: `Bearer ${token}`,
+          authorization: 'Bearer ' + token,
           'x-company-code': 'AUTHORIZED',
         },
       });
-      const denied = await app.inject({
+      const otherActiveCompany = await app.inject({
         method: 'GET',
         url: '/api/v1/dashboards',
         headers: {
-          authorization: `Bearer ${token}`,
+          authorization: 'Bearer ' + token,
           'x-company-code': 'OTHER',
         },
       });
 
       expect(authorized.statusCode).toBe(200);
-      expect(denied.statusCode).toBe(403);
-      expect(denied.json().errors[0].code).toBe('COMPANY_ACCESS_DENIED');
-      expect(mocks.companyAccess).toHaveBeenNthCalledWith(1, 'user-guid', authorizedCompanyGuid);
-      expect(mocks.companyAccess).toHaveBeenNthCalledWith(2, 'user-guid', otherCompanyGuid);
+      expect(otherActiveCompany.statusCode).toBe(200);
+      expect(mocks.companyAccess).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('continues requiring company assignment for Viewer dashboards', async () => {
+    const app = await buildApp();
+
+    try {
+      mocks.getCompanyManagementUserProfile.mockResolvedValue('Viewer');
+      const token = app.jwt.sign({ sub: 'viewer-guid', platformAdmin: false, role: 'Viewer' });
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/dashboards',
+        headers: {
+          authorization: 'Bearer ' + token,
+          'x-company-code': 'OTHER',
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json().errors[0].code).toBe('COMPANY_ACCESS_DENIED');
+      expect(mocks.companyAccess).toHaveBeenCalledWith(
+        'viewer-guid',
+        otherCompanyGuid,
+      );
     } finally {
       await app.close();
     }
@@ -104,12 +128,12 @@ describe('Dashboard tenant authorization', () => {
     const app = await buildApp();
 
     try {
-      const token = app.jwt.sign({ sub: 'user-guid', platformAdmin: false });
+      const token = app.jwt.sign({ sub: 'user-guid', platformAdmin: false, role: 'Editor' });
       const response = await app.inject({
         method: 'GET',
         url: '/api/v1/dashboards',
         headers: {
-          authorization: `Bearer ${token}`,
+          authorization: 'Bearer ' + token,
           'x-company-code': 'AUTHORIZED',
         },
       });

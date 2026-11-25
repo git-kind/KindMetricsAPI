@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
 import { authenticate, resolveCompany, requirePermission } from '../Middleware/Security.js';
+import { authorizeRoles } from '../Middleware/RoleAuthorization.js';
 import { guid } from '../Models/Common.js';
 import { createUserRequestSchema, type CreateUserRequestDto } from '../Models/Users/CreateUserRequestDto.js';
 import type { UserResponseDto } from '../Models/Users/UserResponseDto.js';
@@ -9,7 +10,7 @@ import { createUser, deleteUser, listUsers, updateUser } from '../Repositories/S
 import { actorId } from '../Repositories/StoredProcedures/ActorRepository.js';
 import { buildErrorResponse, buildSuccessResponse, createError } from '../Helpers/ResponseHelper.js';
 export async function userRoutes(app: FastifyInstance) {
-  const hooks = [authenticate, resolveCompany, requirePermission('users:manage:company')];
+  const hooks = [authenticate, authorizeRoles(['Admin']), resolveCompany, requirePermission('users:manage:company')];
   app.get('/users', { preHandler: hooks, schema: { tags: ['Users'] } }, async (request, reply) => {
     const users = await listUsers(request.company!.id);
     return reply.code(200).send(buildSuccessResponse(users as UserResponseDto[], request.id, 'Usuarios obtenidos correctamente.'));

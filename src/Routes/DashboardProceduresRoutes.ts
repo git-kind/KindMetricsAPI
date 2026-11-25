@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { dashboardProceduresController } from '../Controllers/DashboardProceduresController.js';
-import { authenticate, requireDashboardAdmin, resolveCompany } from '../Middleware/Security.js';
+import { authenticate, resolveDashboardCompany } from '../Middleware/Security.js';
+import { authorizeRoles } from '../Middleware/RoleAuthorization.js';
 import {
   createDashboardProcedureSchema,
   dashboardProcedureApiResponseSchema,
@@ -9,7 +10,7 @@ import {
   updateDashboardProcedureSchema,
 } from '../Models/DashboardProcedures/DashboardProcedureDto.js';
 
-const admin = [authenticate, resolveCompany, requireDashboardAdmin] as const;
+const admin = [authenticate, authorizeRoles(['Admin', 'Editor']), resolveDashboardCompany] as const;
 const security = [{ bearerAuth: [], companyCode: [] }];
 const tags = ['Dashboard Procedures'];
 

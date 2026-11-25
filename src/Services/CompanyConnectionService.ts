@@ -17,6 +17,30 @@ function positiveInteger(value: string | undefined, defaultValue: number): numbe
 
 export class CompanyConnectionService {
   async getPool(company: CompanyContext) {
+    const selection = await this.getPoolSelection(company);
+    return selection.pool;
+  }
+
+  async withFallback<T>(
+    company: CompanyContext,
+    operation: (pool: Awaited<ReturnType<typeof companyConnectionManager.getPool>>) => Promise<T>,
+  ): Promise<T> {
+    const selection = await this.getPoolSelection(company);
+    try {
+      return await operation(selection.pool);
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+      const errno = error && typeof error === 'object' && 'errno' in error ? error.errno : undefined;
+      if (selection.usesSharedCredentials || (code !== 'ER_ACCESS_DENIED_ERROR' && errno !== 1045)) {
+        throw error;
+      }
+
+      const fallback = await this.getPoolSelection(company, true);
+      return operation(fallback.pool);
+    }
+  }
+
+  private async getPoolSelection(company: CompanyContext, forceSharedCredentials = false) {
     let credentials: Awaited<ReturnType<typeof getCompanyConnectionCredentials>>;
     try {
       credentials = await getCompanyConnectionCredentials(company);
@@ -34,16 +58,20 @@ export class CompanyConnectionService {
       }
       throw error;
     }
-    if (!credentials?.db_name || !credentials.db_username || !credentials.db_password_encrypted) {
-      throw new AppError('La compañía no tiene configuradas credenciales de base de datos.', {
+    const primaryDatabase = company.code?.trim().toUpperCase() === 'KIND'
+      ? process.env.DB_COMPANY_DATABASE?.trim()
+      : undefined;
+    const database = credentials?.db_name?.trim() || primaryDatabase;
+    if (!database) {
+      throw new AppError('La compañía no tiene configurada una base de datos.', {
         statusCode: 503,
         code: 'COMPANY_DATABASE_NOT_CONFIGURED',
       });
     }
 
-    const host = process.env.DB_COMPANY_HOST;
+    const host = process.env.DB_COMPANY_HOST?.trim() || process.env.MYSQL_HOST?.trim();
     if (!host) {
-      throw new AppError('DB_COMPANY_HOST no está configurado.', {
+      throw new AppError('DB_COMPANY_HOST ni MYSQL_HOST están configurados.', {
         statusCode: 503,
         code: 'COMPANY_DATABASE_CONFIGURATION_INVALID',
       });
@@ -55,16 +83,47 @@ export class CompanyConnectionService {
         code: 'COMPANY_DATABASE_CONFIGURATION_INVALID',
       });
     }
+    const port = positiveInteger(process.env.DB_COMPANY_PORT, positiveInteger(process.env.MYSQL_PORT, 3306));
+    const connectionLimit = positiveInteger(process.env.DB_COMPANY_CONNECTION_LIMIT, 10);
+    const companyUser = process.env.DB_COMPANY_USER?.trim();
+    const companyPassword = process.env.DB_COMPANY_PASSWORD;
+    const mysqlUser = process.env.MYSQL_USER?.trim();
+    const mysqlPassword = process.env.MYSQL_PASSWORD;
+    const hasCompanyCredentials = Boolean(companyUser && companyPassword);
+    const sharedUser = hasCompanyCredentials ? companyUser : mysqlUser;
+    const sharedPassword = hasCompanyCredentials ? companyPassword : mysqlPassword;
+    const storedUsername = credentials?.db_username;
+    const storedPassword = credentials?.db_password_encrypted;
+    const usesSharedCredentials = forceSharedCredentials || !storedUsername || !storedPassword;
+    let username: string;
+    let password: string;
+    if (!usesSharedCredentials && storedUsername && storedPassword) {
+      username = storedUsername;
+      password = companyCredentialService.decrypt(storedPassword);
+    } else {
+      if (!sharedUser || !sharedPassword) {
+        throw new AppError('No hay credenciales de aplicación para conectar con la base de datos de la empresa.', {
+          statusCode: 503,
+          code: 'COMPANY_DATABASE_CONFIGURATION_INVALID',
+        });
+      }
+      username = sharedUser;
+      password = sharedPassword;
+    }
+
     const config: CompanyPoolConfig = {
       host,
-      port: positiveInteger(process.env.DB_COMPANY_PORT, 3306),
-      database: credentials.db_name,
-      username: credentials.db_username,
-      password: companyCredentialService.decrypt(credentials.db_password_encrypted),
+      port,
+      database,
+      username,
+      password,
       ssl: sslValue === 'true',
-      connectionLimit: positiveInteger(process.env.DB_COMPANY_CONNECTION_LIMIT, 10),
+      connectionLimit,
     };
-    return companyConnectionManager.getPool(company.id, config);
+    return {
+      pool: await companyConnectionManager.getPool(company.id, config),
+      usesSharedCredentials,
+    };
   }
 }
 

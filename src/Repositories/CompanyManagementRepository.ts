@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { RowDataPacket } from 'mysql2';
 import { AppError } from '../Errors/AppError.js';
 import type { CompanyManagementDto } from '../Models/Companies/CompanyManagementDto.js';
+import { normalizeUserRole, type UserRole } from '../Models/Auth/UserRole.js';
 import { companyCredentialService } from '../Services/CompanyCredentialService.js';
 import { companyDatabaseInitializer } from '../Services/CompanyDatabaseInitializer.js';
 import { callRows } from './StoredProcedures/ProcedureExecutor.js';
@@ -21,7 +22,8 @@ type CompanyRow = RowDataPacket & {
 };
 
 type CompanyProfileRow = RowDataPacket & {
-  perfil: 'Admin' | 'Editor' | 'Visor';
+  perfil: UserRole | 'Visor';
+  role?: UserRole | string;
 };
 
 type CompanyCodeRow = RowDataPacket & {
@@ -47,6 +49,9 @@ type CompanyDatabaseInput = {
 };
 
 type CompanyUpdateInput = Partial<CompanyInput> & {
+  database_name?: string;
+  database_user?: string;
+  database_password?: string;
   estado?: 'activo' | 'inactivo';
 };
 
@@ -205,9 +210,9 @@ export async function listCompanies(): Promise<CompanyManagementDto[]> {
 
 export async function getCompanyManagementUserProfile(
   guid: string,
-): Promise<'Admin' | 'Editor' | 'Visor' | undefined> {
+): Promise<UserRole | undefined> {
   const [row] = await callRows<CompanyProfileRow>('sp_company_management_user_profile', [guid]);
-  return row?.perfil;
+  return normalizeUserRole(row?.role ?? row?.perfil);
 }
 
 export async function resolveCompanyByCode(code: string) {
@@ -269,8 +274,15 @@ export async function provisionCompanyDatabase(
   input: CompanyDatabaseInput,
 ): Promise<CompanyManagementDto> {
   const applicationUser = process.env.MYSQL_USER?.trim();
+  const applicationPassword = process.env.MYSQL_PASSWORD;
   if (!applicationUser) {
     throw new AppError('MYSQL_USER no está configurado para conceder acceso a KindMetrics.', {
+      statusCode: 503,
+      code: 'COMPANY_DATABASE_CONFIGURATION_INVALID',
+    });
+  }
+  if (!applicationPassword) {
+    throw new AppError('MYSQL_PASSWORD no está configurado para inicializar la base de datos de la empresa.', {
       statusCode: 503,
       code: 'COMPANY_DATABASE_CONFIGURATION_INVALID',
     });
@@ -337,8 +349,8 @@ export async function provisionCompanyDatabase(
   try {
     await companyDatabaseInitializer.initialize({
       database: input.database_name,
-      username: input.database_user,
-      password: input.database_password,
+      username: applicationUser,
+      password: applicationPassword,
     });
   } catch (error) {
     throw new AppError(
@@ -373,11 +385,32 @@ export async function updateCompany(
   id: number,
   input: CompanyUpdateInput,
 ): Promise<CompanyManagementDto | undefined> {
+  const hasDatabaseUpdate = input.database_name !== undefined
+    || input.database_user !== undefined
+    || input.database_password !== undefined;
+  let encryptedPassword: Buffer | null = null;
+  if (hasDatabaseUpdate) {
+    if (!input.database_name || !input.database_user || input.database_password === undefined) {
+      throw new AppError('Debe proporcionar nombre, usuario y contraseña para actualizar la conexión.', {
+        statusCode: 422,
+        code: 'COMPANY_DATABASE_CREDENTIALS_REQUIRED',
+      });
+    }
+    await companyDatabaseInitializer.validateCredentials({
+      database: input.database_name,
+      username: input.database_user,
+      password: input.database_password,
+    });
+    encryptedPassword = companyCredentialService.encrypt(input.database_password);
+  }
+
+  const procedureInput = { ...input };
+  delete procedureInput.database_password;
   try {
     const [row] = await callRows<CompanyRow>('sp_company_management_update', [
       id,
-      JSON.stringify(input),
-      null,
+      JSON.stringify(procedureInput),
+      encryptedPassword,
     ]);
     return row ? toDto(row) : undefined;
   } catch (error) {

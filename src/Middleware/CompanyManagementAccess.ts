@@ -4,11 +4,11 @@ import { pool } from '../Config/DatabaseConfig.js';
 import { buildErrorResponse, createError } from '../Helpers/ResponseHelper.js';
 
 type UserAccessRow = RowDataPacket & {
-  perfil: 'Admin' | 'Visor';
+  perfil: 'Admin' | 'Editor' | 'Viewer' | 'Visor';
   status: string;
 };
 
-export function requireCompanyManagementProfile(allowedProfiles: ('Admin' | 'Visor')[]) {
+export function requireCompanyManagementProfile(allowedProfiles: UserAccessRow['perfil'][]) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
     const [rows] = await pool.execute<UserAccessRow[]>(
       'SELECT perfil, status FROM users WHERE guid = ? LIMIT 1',

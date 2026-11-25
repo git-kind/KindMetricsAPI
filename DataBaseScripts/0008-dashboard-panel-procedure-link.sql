@@ -58,7 +58,7 @@ BEGIN
   SET v_panel_type = JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.panelType'));
   SET v_procedure_guid = JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.dashboardProcedureGuid'));
   SET v_timeout = COALESCE(JSON_VALUE(p_payload, '$.executionTimeoutSeconds' RETURNING UNSIGNED), 30);
-  IF v_timeout < 1 OR v_timeout > 300 THEN SIGNAL SQLSTATE '22023' SET MESSAGE_TEXT = 'INVALID_DASHBOARD_PANEL_TIMEOUT'; END IF;
+  IF v_timeout < 1 OR v_timeout > 1500 THEN SIGNAL SQLSTATE '22023' SET MESSAGE_TEXT = 'INVALID_DASHBOARD_PANEL_TIMEOUT'; END IF;
   IF v_procedure_guid IS NOT NULL AND v_procedure_guid <> 'null' THEN
     SELECT id INTO v_procedure_id FROM dashboard_procedures WHERE guid = v_procedure_guid AND status = 'ACTIVE';
     IF v_procedure_id IS NULL THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'DASHBOARD_PROCEDURE_NOT_ACTIVE'; END IF;
@@ -151,7 +151,7 @@ BEGIN
   END IF;
   IF JSON_CONTAINS_PATH(p_payload, 'one', '$.executionTimeoutSeconds') AND
      (JSON_VALUE(p_payload, '$.executionTimeoutSeconds' RETURNING UNSIGNED) < 1 OR
-      JSON_VALUE(p_payload, '$.executionTimeoutSeconds' RETURNING UNSIGNED) > 300) THEN
+      JSON_VALUE(p_payload, '$.executionTimeoutSeconds' RETURNING UNSIGNED) > 1500) THEN
     SIGNAL SQLSTATE '22023' SET MESSAGE_TEXT = 'INVALID_DASHBOARD_PANEL_TIMEOUT';
   END IF;
   UPDATE dashboard_panels

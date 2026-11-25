@@ -3,7 +3,7 @@ import argon2 from 'argon2';
 import { AppError } from '../Errors/AppError.js';
 import { buildErrorResponse, buildSuccessResponse, createError } from '../Helpers/ResponseHelper.js';
 import { authenticate } from '../Middleware/Security.js';
-import { requireCompanyManagementProfile } from '../Middleware/CompanyManagementAccess.js';
+import { authorizeRoles } from '../Middleware/RoleAuthorization.js';
 import {
   createManagedUserSchema,
   updateManagedUserSchema,
@@ -41,12 +41,11 @@ function throwDuplicateEmail(error: unknown): never {
 }
 
 export async function userManagementRoutes(app: FastifyInstance) {
-  const readHooks = [authenticate, requireCompanyManagementProfile(['Admin', 'Visor'])];
-  const adminHooks = [authenticate, requireCompanyManagementProfile(['Admin'])];
+  const adminHooks = [authenticate, authorizeRoles(['Admin'])];
 
   app.get(
     '/users/management',
-    { preHandler: readHooks, schema: { tags: ['User management'] } },
+    { preHandler: adminHooks, schema: { tags: ['User management'] } },
     async (request, reply) => {
       const users = await listManagedUsers();
       return reply.code(200).send(
@@ -57,7 +56,7 @@ export async function userManagementRoutes(app: FastifyInstance) {
 
   app.get(
     '/users/management/:id',
-    { preHandler: readHooks, schema: { tags: ['User management'] } },
+    { preHandler: adminHooks, schema: { tags: ['User management'] } },
     async (request, reply) => {
       const params = userManagementIdParamsSchema.safeParse(request.params);
       if (!params.success) {

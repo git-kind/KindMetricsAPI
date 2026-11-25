@@ -1,13 +1,13 @@
 import type { RowDataPacket } from 'mysql2';
 import { randomUUID } from 'node:crypto';
-import type { ManagedUserDto } from '../Models/Users/UserManagementDto.js';
+import type { ManagedUserDto, UserManagementProfile } from '../Models/Users/UserManagementDto.js';
 import { callRows } from './StoredProcedures/ProcedureExecutor.js';
 
 type ManagedUserRow = RowDataPacket & {
   id: number;
   name: string;
   email: string;
-  perfil: 'Admin' | 'Visor';
+  perfil: UserManagementProfile;
 };
 
 type EmailTakenRow = RowDataPacket & {
@@ -45,7 +45,7 @@ export async function isManagedUserEmailTaken(
 export async function createManagedUser(input: {
   nombre: string;
   email: string;
-  perfil: 'Admin' | 'Visor';
+  perfil: UserManagementProfile;
   passwordHash: string;
 }): Promise<ManagedUserDto | undefined> {
   const [row] = await callRows<ManagedUserRow>('sp_user_management_create', [
@@ -65,7 +65,7 @@ export async function updateManagedUser(
   input: {
     nombre?: string;
     email?: string;
-    perfil?: 'Admin' | 'Visor';
+    perfil?: UserManagementProfile;
     passwordHash?: string;
   },
 ): Promise<ManagedUserDto | undefined> {

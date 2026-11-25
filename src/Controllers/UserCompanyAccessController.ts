@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { buildErrorResponse, buildSuccessResponse, createError } from '../Helpers/ResponseHelper.js';
 import { authenticate } from '../Middleware/Security.js';
-import { requireCompanyManagementProfile } from '../Middleware/CompanyManagementAccess.js';
+import { authorizeRoles } from '../Middleware/RoleAuthorization.js';
 import {
   userCompanyAccessApiResponseSchema,
   userCompanyAccessParamsSchema,
@@ -20,7 +20,7 @@ function validationErrors(error: { issues: { message: string; path: PropertyKey[
 }
 
 export async function userCompanyAccessRoutes(app: FastifyInstance) {
-  const adminHooks = [authenticate, requireCompanyManagementProfile(['Admin'])];
+  const adminHooks = [authenticate, authorizeRoles(['Admin'])];
 
   app.get(
     '/companies/management/user-access',

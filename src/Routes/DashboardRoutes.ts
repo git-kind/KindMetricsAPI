@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { dashboardsController } from '../Controllers/DashboardsController.js';
-import { authenticate, requireDashboardAdmin, resolveCompany, resolveDashboardReadAccess } from '../Middleware/Security.js';
+import { authenticate, resolveDashboardCompany } from '../Middleware/Security.js';
+import { authorizeRoles } from '../Middleware/RoleAuthorization.js';
 import {
   createDashboardSchema,
   dashboardApiResponseSchema,
@@ -13,8 +14,8 @@ import {
   updateDashboardSchema,
 } from '../Models/Dashboards/DashboardDto.js';
 
-const readHooks = [authenticate, resolveCompany, resolveDashboardReadAccess] as const;
-const writeHooks = [authenticate, resolveCompany, requireDashboardAdmin] as const;
+const readHooks = [authenticate, authorizeRoles(['Admin', 'Editor', 'Viewer']), resolveDashboardCompany] as const;
+const writeHooks = [authenticate, authorizeRoles(['Admin', 'Editor']), resolveDashboardCompany] as const;
 const security = [{ bearerAuth: [], companyCode: [] }];
 const tags = ['Dashboards'];
 

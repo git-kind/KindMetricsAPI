@@ -1,4 +1,4 @@
-import type { Pool } from 'mysql2/promise';
+import type { Pool, PoolOptions } from 'mysql2/promise';
 import { describe, expect, it, vi } from 'vitest';
 import { CompanyConnectionManager, type CompanyPoolConfig } from '../src/Services/CompanyConnectionManager.js';
 
@@ -82,6 +82,36 @@ describe('CompanyConnectionManager', () => {
       expect(pools).toHaveLength(2);
       expect(pools[0]?.end).toHaveBeenCalledOnce();
     } finally {
+      await manager.closeAll();
+    }
+  });
+
+  it('creates a replacement pool even when the previous pool fails to close', async () => {
+    const previousEndError = new Error('pool close failed');
+    const previousPool = {
+      end: vi.fn().mockRejectedValue(previousEndError),
+    } as unknown as Pool;
+    const replacementPool = fakePool();
+    const createPool = vi
+      .fn<(options: PoolOptions) => Pool>(() => replacementPool)
+      .mockImplementationOnce(() => previousPool)
+      .mockReturnValueOnce(replacementPool);
+    const manager = new CompanyConnectionManager(createPool);
+    const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    try {
+      await manager.getPool(1, config());
+      await expect(
+        manager.getPool(1, config({ password: 'rotated-password' })),
+      ).resolves.toBe(replacementPool);
+
+      expect(previousPool.end).toHaveBeenCalledOnce();
+      expect(errorLog).toHaveBeenCalledWith(
+        'Failed to close replaced Company MySQL pool.',
+        { companyId: 1 },
+      );
+    } finally {
+      errorLog.mockRestore();
       await manager.closeAll();
     }
   });

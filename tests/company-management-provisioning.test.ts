@@ -1,10 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const { callRowsMock, encryptMock, initializeMock } = vi.hoisted(() => ({
+const { callRowsMock, encryptMock, initializeMock, validateCredentialsMock } = vi.hoisted(() => ({
   callRowsMock: vi.fn(),
   encryptMock: vi.fn(() => Buffer.from('encrypted-password')),
   initializeMock: vi.fn(),
+  validateCredentialsMock: vi.fn(),
 }));
 
 vi.mock('../src/Repositories/StoredProcedures/ProcedureExecutor.js', () => ({
@@ -16,20 +17,27 @@ vi.mock('../src/Services/CompanyCredentialService.js', () => ({
 }));
 
 vi.mock('../src/Services/CompanyDatabaseInitializer.js', () => ({
-  companyDatabaseInitializer: { initialize: initializeMock },
+  companyDatabaseInitializer: {
+    initialize: initializeMock,
+    validateCredentials: validateCredentialsMock,
+  },
 }));
 
 import {
   createCompany,
   provisionCompanyDatabase,
+  updateCompany,
 } from '../src/Repositories/CompanyManagementRepository.js';
 
 const previousMysqlUser = process.env.MYSQL_USER;
+const previousMysqlPassword = process.env.MYSQL_PASSWORD;
 
 afterEach(() => {
   vi.clearAllMocks();
   if (previousMysqlUser === undefined) delete process.env.MYSQL_USER;
   else process.env.MYSQL_USER = previousMysqlUser;
+  if (previousMysqlPassword === undefined) delete process.env.MYSQL_PASSWORD;
+  else process.env.MYSQL_PASSWORD = previousMysqlPassword;
 });
 
 describe('Company provisioning', () => {
@@ -128,6 +136,7 @@ describe('Company provisioning', () => {
 
   it('provisions database credentials separately for a registered company', async () => {
     process.env.MYSQL_USER = 'kindmetrics_app';
+    process.env.MYSQL_PASSWORD = 'application-password';
     const companyRow = {
       id: 8,
       guid: 'c7d4a114-40f8-4a19-90f2-8ad590baf3a9',
@@ -164,8 +173,8 @@ describe('Company provisioning', () => {
     );
     expect(initializeMock).toHaveBeenCalledWith({
       database: 'empresa_01',
-      username: 'empresa_user',
-      password: 'plaintext-password',
+      username: 'kindmetrics_app',
+      password: 'application-password',
     });
     expect(callRowsMock).toHaveBeenLastCalledWith(
       'sp_company_management_update',
@@ -174,8 +183,52 @@ describe('Company provisioning', () => {
     expect(encryptMock).toHaveBeenCalledWith('plaintext-password');
   });
 
+  it('validates and encrypts updated database credentials without re-provisioning the database', async () => {
+    validateCredentialsMock.mockResolvedValueOnce(undefined);
+    callRowsMock.mockResolvedValueOnce([]);
+
+    await updateCompany(8, {
+      name: 'Empresa actualizada',
+      database_name: 'empresa_01',
+      database_user: 'empresa_user',
+      database_password: 'plaintext-password',
+    });
+
+    expect(validateCredentialsMock).toHaveBeenCalledWith({
+      database: 'empresa_01',
+      username: 'empresa_user',
+      password: 'plaintext-password',
+    });
+    expect(encryptMock).toHaveBeenCalledWith('plaintext-password');
+    expect(callRowsMock).toHaveBeenCalledWith('sp_company_management_update', [
+      8,
+      JSON.stringify({
+        name: 'Empresa actualizada',
+        database_name: 'empresa_01',
+        database_user: 'empresa_user',
+      }),
+      expect.any(Buffer),
+    ]);
+    expect(JSON.stringify(callRowsMock.mock.calls[0])).not.toContain('plaintext-password');
+    expect(initializeMock).not.toHaveBeenCalled();
+  });
+
+  it('does not save database credentials when validation fails', async () => {
+    validateCredentialsMock.mockRejectedValueOnce(new Error('Invalid credentials'));
+
+    await expect(updateCompany(8, {
+      database_name: 'empresa_01',
+      database_user: 'empresa_user',
+      database_password: 'incorrect-password',
+    })).rejects.toThrow('Invalid credentials');
+
+    expect(encryptMock).not.toHaveBeenCalled();
+    expect(callRowsMock).not.toHaveBeenCalled();
+  });
+
   it('leaves the company inactive when tenant migrations fail', async () => {
     process.env.MYSQL_USER = 'kindmetrics_app';
+    process.env.MYSQL_PASSWORD = 'application-password';
     callRowsMock.mockResolvedValueOnce([{
       id: 8,
       guid: 'c7d4a114-40f8-4a19-90f2-8ad590baf3a9',
@@ -205,6 +258,7 @@ describe('Company provisioning', () => {
 
   it('deactivates newly provisioned companies returned active by the old procedure', async () => {
     process.env.MYSQL_USER = 'kindmetrics_app';
+    process.env.MYSQL_PASSWORD = 'application-password';
     const activeCompany = {
       id: 8,
       guid: 'c7d4a114-40f8-4a19-90f2-8ad590baf3a9',
@@ -237,6 +291,7 @@ describe('Company provisioning', () => {
 
   it('rejects reusing the KindMetrics account as the tenant account', async () => {
     process.env.MYSQL_USER = 'kindmetrics_app';
+    process.env.MYSQL_PASSWORD = 'application-password';
 
     await expect(provisionCompanyDatabase(8, {
       database_name: 'empresa_01',
@@ -252,6 +307,7 @@ describe('Company provisioning', () => {
 
   it('reports the procedure migration when MySQL still has the old signature', async () => {
     process.env.MYSQL_USER = 'kindmetrics_app';
+    process.env.MYSQL_PASSWORD = 'application-password';
     callRowsMock.mockRejectedValueOnce({ code: 'ER_SP_WRONG_NO_OF_ARGS' });
 
     await expect(provisionCompanyDatabase(8, {

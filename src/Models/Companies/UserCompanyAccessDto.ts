@@ -14,7 +14,7 @@ export interface UserCompanyAccessUserDto {
   guid: string;
   name: string;
   email: string;
-  perfil: 'Admin' | 'Visor';
+  perfil: 'Admin' | 'Editor' | 'Viewer';
   companyIds: number[];
 }
 
@@ -28,7 +28,7 @@ const assignmentUserSchema = z.object({
   guid: z.string().uuid(),
   name: z.string(),
   email: z.string().email(),
-  perfil: z.enum(['Admin', 'Visor']),
+  perfil: z.enum(['Admin', 'Editor', 'Viewer']),
   companyIds: z.array(z.number().int().positive()),
 });
 

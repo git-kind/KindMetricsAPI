@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { dashboardMetadataController } from '../Controllers/DashboardMetadataController.js';
-import { authenticate, requireDashboardAdmin, resolveCompany } from '../Middleware/Security.js';
+import { authenticate, resolveDashboardCompany } from '../Middleware/Security.js';
+import { authorizeRoles } from '../Middleware/RoleAuthorization.js';
 import {
   dashboardMetadataApiResponseSchema,
   dashboardProcedureDiscoveryResponseSchema,
@@ -11,7 +12,7 @@ import {
   validateDashboardProcedureSchema,
 } from '../Models/DashboardMetadata/DashboardMetadataDto.js';
 
-const admin = [authenticate, resolveCompany, requireDashboardAdmin] as const;
+const admin = [authenticate, authorizeRoles(['Admin', 'Editor']), resolveDashboardCompany] as const;
 const security = [{ bearerAuth: [], companyCode: [] }];
 const tags = ['Dashboard Metadata'];
 

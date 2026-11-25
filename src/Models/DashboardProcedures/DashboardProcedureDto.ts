@@ -33,7 +33,7 @@ export const createDashboardProcedureSchema = z
     description: z.string().max(20_000).nullable().optional(),
     parametersSchema,
     resultSchema,
-    executionTimeoutSeconds: z.number().int().min(1).max(300).default(30),
+    executionTimeoutSeconds: z.number().int().min(1).max(1500).default(30),
   })
   .strict();
 
@@ -44,7 +44,7 @@ export const updateDashboardProcedureSchema = z
     parametersSchema: parametersSchema.optional(),
     resultSchema: resultSchema.optional(),
     status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
-    executionTimeoutSeconds: z.number().int().min(1).max(300).optional(),
+    executionTimeoutSeconds: z.number().int().min(1).max(1500).optional(),
     expectedVersion,
   })
   .strict()
@@ -60,7 +60,7 @@ export const dashboardProcedureResponseSchema = z.object({
   parametersSchema,
   resultSchema,
   status: z.enum(['PENDING', 'ACTIVE', 'INACTIVE']),
-  executionTimeoutSeconds: z.number().int().positive().max(300),
+  executionTimeoutSeconds: z.number().int().positive().max(1500),
   version: z.number().int().positive().safe(),
   createdAt: z.string().datetime(),
   createdBy: z.number().int().positive().safe(),

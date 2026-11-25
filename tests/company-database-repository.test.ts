@@ -6,7 +6,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../src/Services/CompanyConnectionService.js', () => ({
-  companyConnectionService: { getPool: mocks.getPool },
+  companyConnectionService: {
+    getPool: mocks.getPool,
+    withFallback: async (_company: unknown, operation: (pool: unknown) => Promise<unknown>) =>
+      operation(await mocks.getPool()),
+  },
 }));
 
 vi.mock('../src/Database/SqlExecutor.js', () => ({
@@ -44,5 +48,17 @@ describe('CompanyDatabaseRepository connection errors', () => {
     mocks.callStoredProcedure.mockRejectedValue(error);
 
     await expect(repository.callRows(company, 'sp_dashboard_list')).rejects.toBe(error);
+  });
+
+  it('explains when a dashboard procedure references a deleted MySQL definer', async () => {
+    mocks.callStoredProcedure.mockRejectedValue({
+      code: 'ER_NO_SUCH_USER',
+      errno: 1449,
+    });
+
+    await expect(repository.callRows(company, 'sp_dashboard_list')).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'COMPANY_DATABASE_PROCEDURE_DEFINER_MISSING',
+    });
   });
 });

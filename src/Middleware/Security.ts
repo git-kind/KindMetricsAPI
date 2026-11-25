@@ -1,8 +1,9 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { companyAccess, permission as getPermission } from '../Repositories/StoredProcedures/AuthRepository.js';
 import type { CompanyContext, Principal } from '../Models/Common.js';
-import { getCompanyManagementUserProfile, resolveCompanyByCode } from '../Repositories/CompanyManagementRepository.js';
+import { resolveCompanyByCode } from '../Repositories/CompanyManagementRepository.js';
 import { buildErrorResponse, createError } from '../Helpers/ResponseHelper.js';
+import { normalizeUserRole } from '../Models/Auth/UserRole.js';
 declare module 'fastify' {
   interface FastifyRequest {
     principal?: Principal;
@@ -21,13 +22,22 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
         .code(401)
         .send(buildErrorResponse('No autorizado.', [createError('UNAUTHORIZED', 'Credenciales no válidas o sesión expirada.')], request.id));
     }
-    request.principal = { sub: token.sub, platformAdmin: token.platformAdmin };
+    const role = normalizeUserRole(token.role);
+    request.principal = {
+      sub: token.sub,
+      platformAdmin: token.platformAdmin,
+      ...(role ? { role } : {}),
+    };
   } catch {
     return reply.code(401).send(buildErrorResponse('No autorizado.', [createError('UNAUTHORIZED', 'Credenciales no válidas o sesión expirada.')], request.id));
   }
 }
 
-export async function resolveCompany(request: FastifyRequest, reply: FastifyReply) {
+async function resolveCompanyContext(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  allowDashboardManagerAcrossCompanies: boolean,
+) {
   request.company = undefined;
   const code = request.headers['x-company-code'];
   if (typeof code !== 'string' || !companyCodePattern.test(code)) {
@@ -49,7 +59,9 @@ export async function resolveCompany(request: FastifyRequest, reply: FastifyRepl
       .send(buildErrorResponse('Recurso no encontrado.', [createError('COMPANY_NOT_FOUND', 'La compañía indicada no existe o está inactiva.')], request.id));
   }
 
-  if (!request.principal!.platformAdmin) {
+  const canAccessAllDashboardCompanies =
+    allowDashboardManagerAcrossCompanies && request.dashboardCanManage === true;
+  if (!request.principal!.platformAdmin && !canAccessAllDashboardCompanies) {
     const access = await companyAccess(request.principal!.sub, company.guid);
     if (!access) {
       return reply
@@ -61,42 +73,15 @@ export async function resolveCompany(request: FastifyRequest, reply: FastifyRepl
   request.company = { guid: company.guid, id: company.id, code: company.code };
 }
 
-export async function resolveDashboardReadAccess(request: FastifyRequest, reply: FastifyReply) {
-  if (request.principal?.platformAdmin) {
-    request.dashboardCanManage = true;
-    return;
-  }
-
-  const profile = await getCompanyManagementUserProfile(request.principal!.sub);
-  if (profile === 'Admin' || profile === 'Editor') {
-    request.dashboardCanManage = true;
-    return;
-  }
-  if (profile === 'Visor') {
-    request.dashboardCanManage = false;
-    return;
-  }
-
-  return reply
-    .code(403)
-    .send(
-      buildErrorResponse('Acceso denegado.', [createError('COMPANY_PROFILE_FORBIDDEN', 'Tu perfil no tiene permiso para consultar Dashboards.')], request.id),
-    );
+export async function resolveCompany(request: FastifyRequest, reply: FastifyReply) {
+  return resolveCompanyContext(request, reply, false);
 }
 
-export async function requireDashboardAdmin(request: FastifyRequest, reply: FastifyReply) {
-  if (request.principal?.platformAdmin) {
-    request.dashboardCanManage = true;
-    return;
-  }
-
-  const profile = await getCompanyManagementUserProfile(request.principal!.sub);
-  if (profile !== 'Admin' && profile !== 'Editor') {
-    return reply
-      .code(403)
-      .send(buildErrorResponse('Acceso denegado.', [createError('COMPANY_PROFILE_FORBIDDEN', 'Solo Admin o Editor puede modificar Dashboards.')], request.id));
-  }
-  request.dashboardCanManage = true;
+export async function resolveDashboardCompany(
+  request: FastifyRequest,
+  reply: FastifyReply,
+) {
+  return resolveCompanyContext(request, reply, true);
 }
 
 export function requirePermission(permission: string) {

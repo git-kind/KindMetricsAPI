@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS dashboard_procedures (
   UNIQUE KEY uq_dashboard_procedures_name (procedure_name),
   KEY idx_dashboard_procedures_status (status),
   CONSTRAINT chk_dashboard_procedures_status CHECK (status IN ('PENDING', 'ACTIVE', 'INACTIVE')),
-  CONSTRAINT chk_dashboard_procedures_timeout CHECK (execution_timeout_seconds BETWEEN 1 AND 300),
+  CONSTRAINT chk_dashboard_procedures_timeout CHECK (execution_timeout_seconds BETWEEN 1 AND 1500),
   CONSTRAINT chk_dashboard_procedures_version CHECK (version >= 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -170,7 +170,7 @@ BEGIN
   SET v_name = JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.procedureName'));
   SET v_parameter_count = JSON_LENGTH(JSON_EXTRACT(p_payload, '$.parametersSchema.parameters'));
   SET v_timeout = COALESCE(JSON_VALUE(p_payload, '$.executionTimeoutSeconds' RETURNING UNSIGNED), 30);
-  IF v_name NOT REGEXP '^sp_dash_[A-Za-z0-9_]{1,112}$' OR v_timeout < 1 OR v_timeout > 300
+  IF v_name NOT REGEXP '^sp_dash_[A-Za-z0-9_]{1,112}$' OR v_timeout < 1 OR v_timeout > 1500
      OR JSON_LENGTH(JSON_EXTRACT(p_payload, '$.parametersSchema.parameters')) > 64
      OR NOT EXISTS (SELECT 1 FROM information_schema.ROUTINES
                     WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = v_name AND ROUTINE_TYPE = 'PROCEDURE') THEN
@@ -231,7 +231,7 @@ BEGIN
      OR (JSON_CONTAINS_PATH(p_payload, 'one', '$.executionTimeoutSeconds') AND
          (JSON_TYPE(JSON_EXTRACT(p_payload, '$.executionTimeoutSeconds')) <> 'INTEGER'
           OR CAST(JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.executionTimeoutSeconds')) AS UNSIGNED) < 1
-          OR CAST(JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.executionTimeoutSeconds')) AS UNSIGNED) > 300))
+          OR CAST(JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.executionTimeoutSeconds')) AS UNSIGNED) > 1500))
      OR (JSON_CONTAINS_PATH(p_payload, 'one', '$.status') AND JSON_UNQUOTE(JSON_EXTRACT(p_payload, '$.status')) NOT IN ('ACTIVE', 'INACTIVE')) THEN
     SIGNAL SQLSTATE '22023' SET MESSAGE_TEXT = 'INVALID_DASHBOARD_PROCEDURE';
   END IF;

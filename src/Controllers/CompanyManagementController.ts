@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { buildErrorResponse, buildSuccessResponse, createError } from '../Helpers/ResponseHelper.js';
 import { authenticate } from '../Middleware/Security.js';
-import { requireCompanyManagementProfile } from '../Middleware/CompanyManagementAccess.js';
+import { authorizeRoles } from '../Middleware/RoleAuthorization.js';
+import { normalizeUserRole } from '../Models/Auth/UserRole.js';
 import {
   companyManagementAccessResponseSchema,
   companyApiResponseSchema,
@@ -39,13 +40,13 @@ function validationErrors(error: { issues: { message: string; path: PropertyKey[
 }
 
 export async function companyManagementRoutes(app: FastifyInstance) {
-  const readHooks = [authenticate, requireCompanyManagementProfile(['Admin', 'Visor'])];
-  const adminHooks = [authenticate, requireCompanyManagementProfile(['Admin'])];
+  const profileHooks = [authenticate, authorizeRoles(['Admin', 'Editor', 'Viewer'])];
+  const adminHooks = [authenticate, authorizeRoles(['Admin'])];
 
   app.get(
     '/companies/management/access',
     {
-      preHandler: readHooks,
+      preHandler: profileHooks,
       schema: {
         tags: ['Company management'],
         response: {
@@ -57,7 +58,8 @@ export async function companyManagementRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const perfil = await getCompanyManagementUserProfile(request.principal!.sub);
-      if (!perfil) {
+      const role = normalizeUserRole(perfil);
+      if (!role) {
         return reply.code(403).send(
           buildErrorResponse(
             'Acceso denegado.',
@@ -68,7 +70,7 @@ export async function companyManagementRoutes(app: FastifyInstance) {
       }
       return reply.code(200).send(
         buildSuccessResponse(
-          { perfil, canManage: perfil === 'Admin' },
+          { perfil: role, role, canManage: role === 'Admin' },
           request.id,
           'Permisos de empresas obtenidos correctamente.',
         ),
@@ -79,7 +81,7 @@ export async function companyManagementRoutes(app: FastifyInstance) {
   app.get(
     '/companies/management',
     {
-      preHandler: readHooks,
+      preHandler: adminHooks,
       schema: { tags: ['Company management'], response: responseSchemas },
     },
     async (request, reply) => {
@@ -93,7 +95,7 @@ export async function companyManagementRoutes(app: FastifyInstance) {
   app.get(
     '/companies/management/:id',
     {
-      preHandler: readHooks,
+      preHandler: adminHooks,
       schema: { tags: ['Company management'], response: responseSchemas },
     },
     async (request, reply) => {

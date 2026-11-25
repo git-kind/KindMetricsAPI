@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { updateCompanySchema } from '../src/Models/Companies/CompanyManagementDto.js';
 
 const previousSecret = process.env.JWT_SECRET;
 
@@ -9,6 +10,17 @@ afterEach(() => {
 });
 
 describe('Company management routes', () => {
+  it('requires all company database credentials when updating a connection', () => {
+    expect(updateCompanySchema.safeParse({
+      database_name: 'empresa_01',
+    }).success).toBe(false);
+    expect(updateCompanySchema.safeParse({
+      database_name: 'empresa_01',
+      database_user: 'empresa_user',
+      database_password: 'new-password',
+    }).success).toBe(true);
+  });
+
   it('identifies required company fields missing from the provisioning request', async () => {
     process.env.JWT_SECRET = 'test-secret-with-more-than-32-bytes';
     const app = await buildApp();

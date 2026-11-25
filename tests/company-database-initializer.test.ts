@@ -124,4 +124,41 @@ describe('CompanyDatabaseInitializer', () => {
     expect(queryMock).toHaveBeenCalledOnce();
     expect(endMock).toHaveBeenCalledOnce();
   });
+
+  it('validates credentials without running database migrations', async () => {
+    const initializer = new CompanyDatabaseInitializer();
+    await initializer.validateCredentials({
+      database: 'tenant_db',
+      username: 'tenant_user',
+      password: 'tenant-password',
+    });
+
+    expect(createConnectionMock).toHaveBeenCalledWith({
+      host: 'db.example.test',
+      port: 3307,
+      database: 'tenant_db',
+      user: 'tenant_user',
+      password: 'tenant-password',
+      connectTimeout: 5000,
+      multipleStatements: false,
+      ssl: {},
+    });
+    expect(queryMock).toHaveBeenCalledOnce();
+    expect(endMock).toHaveBeenCalledOnce();
+  });
+
+  it('reports rejected company credentials before saving connection changes', async () => {
+    createConnectionMock.mockRejectedValueOnce({ code: 'ER_ACCESS_DENIED_ERROR' });
+    const initializer = new CompanyDatabaseInitializer();
+
+    await expect(initializer.validateCredentials({
+      database: 'tenant_db',
+      username: 'tenant_user',
+      password: 'incorrect-password',
+    })).rejects.toMatchObject({
+      statusCode: 422,
+      code: 'COMPANY_DATABASE_CREDENTIALS_INVALID',
+    });
+    expect(queryMock).not.toHaveBeenCalled();
+  });
 });

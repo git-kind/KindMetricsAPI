@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { UserRole } from './Auth/UserRole.js';
 
 export { loginRequestSchema, loginSchema } from './Auth/LoginRequestDto.js';
 export {
@@ -24,5 +25,5 @@ export const querySchema = z.object({
   params: z.array(z.union([z.string(), z.number(), z.boolean(), z.null()])).default([]),
   maxRows: z.number().int().min(1).max(5000).default(1000),
 });
-export type Principal = { sub: string; platformAdmin: boolean };
+export type Principal = { sub: string; platformAdmin: boolean; role?: UserRole };
 export type CompanyContext = { guid: string; id: number; code?: string };

@@ -147,10 +147,14 @@ export class CompanyConnectionManager {
     clearTimeout(entry.idleTimer);
     try {
       await entry.pool.end();
-    } catch {
-      throw new AppError('No fue posible cerrar el pool anterior de la compañía.', {
-        statusCode: 503,
-        code: 'COMPANY_POOL_CLOSE_FAILED',
+    } catch (error) {
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? error.code
+          : undefined;
+      console.error('Failed to close replaced Company MySQL pool.', {
+        companyId,
+        ...(typeof code === 'string' ? { code } : {}),
       });
     }
   }

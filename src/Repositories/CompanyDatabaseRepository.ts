@@ -23,6 +23,13 @@ function translateCompanyDatabaseError(error: unknown): never {
     });
   }
 
+  if (code === 'ER_NO_SUCH_USER') {
+    throw new AppError('La base de datos tiene procedimientos con una cuenta definidora eliminada. Vuelve a aplicar las migraciones de Dashboards.', {
+      statusCode: 503,
+      code: 'COMPANY_DATABASE_PROCEDURE_DEFINER_MISSING',
+    });
+  }
+
   if (typeof code === 'string' && ['ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'EHOSTUNREACH', 'ECONNRESET', 'PROTOCOL_CONNECTION_LOST'].includes(code)) {
     throw new AppError('No fue posible conectar con la base de datos configurada para la empresa.', {
       statusCode: 503,
@@ -36,9 +43,10 @@ function translateCompanyDatabaseError(error: unknown): never {
 export class CompanyDatabaseRepository {
   async execute(company: CompanyContext, sql: string, params: readonly ProcedureParameter[] = []): Promise<ResultSetHeader> {
     try {
-      const companyPool = await companyConnectionService.getPool(company);
-      const [result] = await companyPool.execute<ResultSetHeader>(sql, [...params]);
-      return result;
+      return await companyConnectionService.withFallback(company, async (companyPool) => {
+        const [result] = await companyPool.execute<ResultSetHeader>(sql, [...params]);
+        return result;
+      });
     } catch (error) {
       return translateCompanyDatabaseError(error);
     }
@@ -46,9 +54,10 @@ export class CompanyDatabaseRepository {
 
   async queryRows<T extends RowDataPacket>(company: CompanyContext, sql: string, params: readonly ProcedureParameter[] = []): Promise<T[]> {
     try {
-      const companyPool = await companyConnectionService.getPool(company);
-      const [rows] = await companyPool.execute<T[]>(sql, [...params]);
-      return rows;
+      return await companyConnectionService.withFallback(company, async (companyPool) => {
+        const [rows] = await companyPool.execute<T[]>(sql, [...params]);
+        return rows;
+      });
     } catch (error) {
       return translateCompanyDatabaseError(error);
     }
@@ -61,8 +70,10 @@ export class CompanyDatabaseRepository {
 
   async callResultSets<T extends RowDataPacket>(company: CompanyContext, procedure: string, params: readonly ProcedureParameter[] = []): Promise<T[][]> {
     try {
-      const companyPool = await companyConnectionService.getPool(company);
-      return await callStoredProcedure<T>(companyPool, procedure, params);
+      return await companyConnectionService.withFallback(
+        company,
+        (companyPool) => callStoredProcedure<T>(companyPool, procedure, params),
+      );
     } catch (error) {
       return translateCompanyDatabaseError(error);
     }
@@ -75,8 +86,10 @@ export class CompanyDatabaseRepository {
     timeoutSeconds: number,
   ): Promise<RowDataPacket[][]> {
     try {
-      const companyPool = await companyConnectionService.getPool(company);
-      return await executeReadOnlyProcedure(companyPool, procedure, params, timeoutSeconds);
+      return await companyConnectionService.withFallback(
+        company,
+        (companyPool) => executeReadOnlyProcedure(companyPool, procedure, params, timeoutSeconds),
+      );
     } catch (error) {
       return translateCompanyDatabaseError(error);
     }
@@ -89,8 +102,10 @@ export class CompanyDatabaseRepository {
     timeoutSeconds: number,
   ): Promise<{ resultSets: RowDataPacket[][]; columns: ProcedureResultColumn[] }> {
     try {
-      const companyPool = await companyConnectionService.getPool(company);
-      return await executeReadOnlyProcedureWithMetadata(companyPool, procedure, params, timeoutSeconds);
+      return await companyConnectionService.withFallback(
+        company,
+        (companyPool) => executeReadOnlyProcedureWithMetadata(companyPool, procedure, params, timeoutSeconds),
+      );
     } catch (error) {
       return translateCompanyDatabaseError(error);
     }

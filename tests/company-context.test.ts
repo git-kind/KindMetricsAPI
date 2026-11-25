@@ -12,7 +12,11 @@ vi.mock('../src/Repositories/CompanyManagementRepository.js', () => ({
 
 import { getCompanyManagementUserProfile, resolveCompanyByCode } from '../src/Repositories/CompanyManagementRepository.js';
 import { companyAccess } from '../src/Repositories/StoredProcedures/AuthRepository.js';
-import { requireDashboardAdmin, resolveCompany, resolveDashboardReadAccess } from '../src/Middleware/Security.js';
+import {
+  resolveCompany,
+  resolveDashboardCompany,
+} from '../src/Middleware/Security.js';
+import { authorizeRoles } from '../src/Middleware/RoleAuthorization.js';
 
 function requestWith(code: string | undefined, platformAdmin = false): FastifyRequest {
   return {
@@ -140,6 +144,54 @@ describe('Company context resolution', () => {
     expect(request.company).toBeUndefined();
   });
 
+  it('allows Editor and Admin dashboard access across active companies without changing other modules', async () => {
+    const request = requestWith('ACME');
+    const { reply, state } = replyDouble();
+    vi.mocked(resolveCompanyByCode).mockResolvedValue({
+      id: 8,
+      guid: '123e4567-e89b-12d3-a456-426614174000',
+      code: 'ACME',
+      status: 'ACTIVE',
+    });
+    vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Editor');
+
+    await authorizeRoles(['Admin', 'Editor', 'Viewer'])(request, reply);
+    await resolveDashboardCompany(request, reply);
+
+    expect(request.company?.code).toBe('ACME');
+    expect(companyAccess).not.toHaveBeenCalled();
+
+    request.company = undefined;
+    vi.mocked(companyAccess).mockResolvedValueOnce(undefined);
+    await resolveCompany(request, reply);
+
+    expect(state.status).toBe(403);
+    expect(request.company).toBeUndefined();
+  });
+
+  it('keeps Viewer dashboard access restricted to assigned companies', async () => {
+    const request = requestWith('ACME');
+    const { reply, state } = replyDouble();
+    vi.mocked(resolveCompanyByCode).mockResolvedValue({
+      id: 8,
+      guid: '123e4567-e89b-12d3-a456-426614174000',
+      code: 'ACME',
+      status: 'ACTIVE',
+    });
+    vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Viewer');
+    vi.mocked(companyAccess).mockResolvedValueOnce(undefined);
+
+    await authorizeRoles(['Admin', 'Editor', 'Viewer'])(request, reply);
+    await resolveDashboardCompany(request, reply);
+
+    expect(state.status).toBe(403);
+    expect(companyAccess).toHaveBeenCalledWith(
+      'user-guid',
+      '123e4567-e89b-12d3-a456-426614174000',
+    );
+    expect(request.company).toBeUndefined();
+  });
+
   it('allows a platform administrator to resolve a company without a membership row', async () => {
     const request = requestWith('ACME', true);
     const { reply } = replyDouble();
@@ -156,7 +208,7 @@ describe('Company context resolution', () => {
     expect(request.company?.code).toBe('ACME');
   });
 
-  it('allows Admin and Editor to manage Dashboards while Visor remains read-only', async () => {
+  it('allows Viewer to read dashboards but denies writes; Admin and Editor can manage', async () => {
     const viewerRequest = requestWith('ACME');
     viewerRequest.company = {
       id: 8,
@@ -164,29 +216,25 @@ describe('Company context resolution', () => {
       code: 'ACME',
     };
     const { reply, state } = replyDouble();
-    vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Visor');
+    vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Viewer');
 
-    await resolveDashboardReadAccess(viewerRequest, reply);
+    await authorizeRoles(['Admin', 'Editor', 'Viewer'])(viewerRequest, reply);
     expect(viewerRequest.dashboardCanManage).toBe(false);
 
-    vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Visor');
-    await requireDashboardAdmin(viewerRequest, reply);
+    vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Viewer');
+    await authorizeRoles(['Admin', 'Editor'])(viewerRequest, reply);
     expect(state.status).toBe(403);
 
     const editorRequest = requestWith('ACME');
     editorRequest.company = viewerRequest.company;
     vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Editor');
-    await resolveDashboardReadAccess(editorRequest, reply);
-    expect(editorRequest.dashboardCanManage).toBe(true);
-
-    vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Editor');
-    await requireDashboardAdmin(editorRequest, reply);
+    await authorizeRoles(['Admin', 'Editor', 'Viewer'])(editorRequest, reply);
     expect(editorRequest.dashboardCanManage).toBe(true);
 
     const adminRequest = requestWith('ACME');
     adminRequest.company = viewerRequest.company;
     vi.mocked(getCompanyManagementUserProfile).mockResolvedValueOnce('Admin');
-    await resolveDashboardReadAccess(adminRequest, reply);
+    await authorizeRoles(['Admin', 'Editor'])(adminRequest, reply);
     expect(adminRequest.dashboardCanManage).toBe(true);
   });
 });

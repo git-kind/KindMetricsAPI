@@ -1,11 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { querySchema } from '../Models/Common.js';
 import { authenticate, resolveCompany, requirePermission } from '../Middleware/Security.js';
+import { authorizeRoles } from '../Middleware/RoleAuthorization.js';
 import { QueryService } from '../Services/QueryService.js';
 import { buildErrorResponse, buildSuccessResponse, createError } from '../Helpers/ResponseHelper.js';
 const service = new QueryService();
 export async function queryRoutes(app: FastifyInstance) {
-  app.post('/queries/execute', { preHandler: [authenticate, resolveCompany, requirePermission('datasource:query:company')], schema: { tags: ['Queries'], body: querySchema } }, async (request, reply) => {
+  app.post('/queries/execute', { preHandler: [authenticate, authorizeRoles(['Admin', 'Editor']), resolveCompany, requirePermission('datasource:query:company')], schema: { tags: ['Queries'], body: querySchema } }, async (request, reply) => {
     const result = querySchema.safeParse(request.body);
     if (!result.success) {
       const issues = result.error.issues.map((issue) => createError('VALIDATION_ERROR', issue.message, issue.path.join('.')));

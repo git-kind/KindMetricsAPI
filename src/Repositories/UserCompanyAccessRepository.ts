@@ -3,6 +3,7 @@ import type {
   UserCompanyAccessCompanyDto,
   UserCompanyAccessUserDto,
 } from '../Models/Companies/UserCompanyAccessDto.js';
+import { normalizeUserRole } from '../Models/Auth/UserRole.js';
 import { callRows } from './StoredProcedures/ProcedureExecutor.js';
 
 type UserRow = {
@@ -10,7 +11,7 @@ type UserRow = {
   guid: string;
   name: string;
   email: string;
-  perfil: 'Admin' | 'Visor';
+  perfil: 'Admin' | 'Editor' | 'Viewer';
   companyIds: number[] | string | null;
 };
 
@@ -72,6 +73,18 @@ export async function listAvailableCompanies(
   userGuid: string,
 ): Promise<UserCompanyAccessCompanyDto[]> {
   try {
+    const [profile] = await callRows<{
+      perfil?: string;
+      role?: string;
+    }>('sp_company_management_user_profile', [userGuid]);
+    const role = normalizeUserRole(profile?.role ?? profile?.perfil);
+    if (role === 'Admin') {
+      return await callRows<UserCompanyAccessCompanyDto>(
+        'sp_user_company_access_companies',
+        [],
+      );
+    }
+
     return await callRows<UserCompanyAccessCompanyDto>(
       'sp_user_available_companies',
       [userGuid],

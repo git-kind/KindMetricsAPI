@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { dashboardTabsController } from '../Controllers/DashboardTabsController.js';
-import { authenticate, requireDashboardAdmin, resolveCompany, resolveDashboardReadAccess } from '../Middleware/Security.js';
+import { authenticate, resolveDashboardCompany } from '../Middleware/Security.js';
+import { authorizeRoles } from '../Middleware/RoleAuthorization.js';
 import {
   createDashboardTabSchema,
   dashboardTabListQuerySchema,
@@ -13,8 +14,8 @@ import {
   updateDashboardTabSchema,
 } from '../Models/Dashboards/DashboardTabDto.js';
 
-const read = [authenticate, resolveCompany, resolveDashboardReadAccess] as const;
-const write = [authenticate, resolveCompany, requireDashboardAdmin] as const;
+const read = [authenticate, authorizeRoles(['Admin', 'Editor', 'Viewer']), resolveDashboardCompany] as const;
+const write = [authenticate, authorizeRoles(['Admin', 'Editor']), resolveDashboardCompany] as const;
 const security = [{ bearerAuth: [], companyCode: [] }];
 const tags = ['Dashboard Tabs'];
 

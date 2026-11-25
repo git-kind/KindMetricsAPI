@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
-export const userManagementProfileSchema = z.enum(['Admin', 'Visor']);
+export const userManagementProfileSchema = z.enum(['Admin', 'Editor', 'Viewer']);
+export type UserManagementProfile = z.infer<typeof userManagementProfileSchema>;
 
 export const userManagementIdParamsSchema = z.object({
   id: z.coerce.number().int().positive().safe(),
@@ -37,5 +38,5 @@ export interface ManagedUserDto {
   id: number;
   nombre: string;
   email: string;
-  perfil: 'Admin' | 'Visor';
+  perfil: UserManagementProfile;
 }

@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { entityCreateSchema, entityUpdateSchema, companyCreateSchema, guid } from '../Models/Common.js';
 import { authenticate, resolveCompany, requirePermission } from '../Middleware/Security.js';
+import { authorizeRoles } from '../Middleware/RoleAuthorization.js';
 import { EntityService } from '../Services/EntityService.js';
 import { actorId } from '../Repositories/StoredProcedures/ActorRepository.js';
 import type { EntityName } from '../Repositories/StoredProcedures/EntityRepository.js';
@@ -19,14 +20,15 @@ export async function entityRoutes(app: FastifyInstance) {
   for (const { entity, global } of entityModules) {
     const service = new EntityService(entity);
     const base = `/${entity}`;
-    const access = async (request: Parameters<typeof authenticate>[0], reply: Parameters<typeof authenticate>[1]) => {
-      if (global && !request.principal?.platformAdmin)
-        return reply
-          .code(403)
-          .send(buildErrorResponse('Acceso denegado.', [createError('PLATFORM_ADMIN_REQUIRED', 'Se requieren permisos de administrador global.')], request.id));
-    };
-    const readHooks = global ? [authenticate, access] : [authenticate, resolveCompany, requirePermission(`${entity}:read:company`)];
-    const writeHooks = global ? [authenticate, access] : [authenticate, resolveCompany, requirePermission(`${entity}:manage:company`)];
+    const allowedRoles = ['folders', 'panels'].includes(entity)
+      ? (['Admin', 'Editor'] as const)
+      : (['Admin'] as const);
+    const readHooks = global
+      ? [authenticate, authorizeRoles(['Admin'])]
+      : [authenticate, authorizeRoles(allowedRoles), resolveCompany, requirePermission(`${entity}:read:company`)];
+    const writeHooks = global
+      ? [authenticate, authorizeRoles(['Admin'])]
+      : [authenticate, authorizeRoles(allowedRoles), resolveCompany, requirePermission(`${entity}:manage:company`)];
     const companyId = (r: Parameters<typeof authenticate>[0]) => (global ? null : r.company!.id);
     app.get(base, { preHandler: readHooks, schema: { tags: [entity] } }, async (request, reply) => {
       const rows = await service.list(companyId(request));
