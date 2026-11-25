@@ -3,8 +3,8 @@ import { dashboardMetadataController } from '../Controllers/DashboardMetadataCon
 import {
   authenticate,
   requireKindTechDashboardAdmin,
-  resolveKindTechContext,
-  resolveKindTechDashboardReadAccess,
+  resolveCompany,
+  resolveDashboardReadAccess,
 } from '../Middleware/Security.js';
 import {
   dashboardMetadataApiResponseSchema,
@@ -16,9 +16,9 @@ import {
   validateDashboardProcedureSchema,
 } from '../Models/DashboardMetadata/DashboardMetadataDto.js';
 
-const read = [authenticate, resolveKindTechContext, resolveKindTechDashboardReadAccess] as const;
-const write = [authenticate, resolveKindTechContext, requireKindTechDashboardAdmin] as const;
-const security = [{ bearerAuth: [] }];
+const read = [authenticate, resolveCompany, resolveDashboardReadAccess] as const;
+const write = [authenticate, resolveCompany, requireKindTechDashboardAdmin] as const;
+const security = [{ bearerAuth: [], companyCode: [] }];
 const tags = ['Dashboard Metadata'];
 
 export async function dashboardMetadataRoutes(app: FastifyInstance) {

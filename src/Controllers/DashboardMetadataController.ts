@@ -29,14 +29,14 @@ export class DashboardMetadataController {
   async validateProcedure(request: FastifyRequest, reply: FastifyReply) {
     const input = validateDashboardProcedureSchema.safeParse(request.body);
     if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(input.error), request.id));
-    const data = await service.validateProcedure(request.company!, input.data);
+    const data = await service.validateProcedure(request.company!, input.data, request.id);
     return reply.code(200).send(buildSuccessResponse(data, request.id, 'Validación del procedimiento completada.'));
   }
 
   async previewProcedure(request: FastifyRequest, reply: FastifyReply) {
     const input = dashboardProcedurePreviewSchema.safeParse(request.body);
     if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', validationErrors(input.error), request.id));
-    const data = await service.previewProcedure(request.company!, input.data);
+    const data = await service.previewProcedure(request.company!, input.data, request.id);
     return reply.code(200).send(buildSuccessResponse(data, request.id, 'Preview del procedimiento ejecutado correctamente.'));
   }
 }

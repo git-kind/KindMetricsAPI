@@ -70,7 +70,7 @@ export function handleApiError(error: unknown, request: FastifyRequest, reply: F
       );
     }
     reply.code(error.statusCode).send(
-      buildErrorResponse(error.message, [createError(error.code, error.message, error.field)], requestId),
+      buildErrorResponse(error.message, [createError(error.code, error.message, error.field, error.context)], requestId),
     );
     return;
   }

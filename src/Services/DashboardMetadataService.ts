@@ -158,8 +158,8 @@ export class DashboardMetadataService {
     return this.repository.discoverProcedures(company);
   }
 
-  async validateProcedure(company: CompanyContext, input: ValidateDashboardProcedureDto) {
-    const procedure = await this.repository.inspectProcedure(company, input.procedureName);
+  async validateProcedure(company: CompanyContext, input: ValidateDashboardProcedureDto, requestId?: string) {
+    const procedure = await this.repository.inspectProcedure(company, input.procedureName, requestId);
     if (!procedure) {
       return {
         valid: false,
@@ -192,8 +192,8 @@ export class DashboardMetadataService {
     };
   }
 
-  async previewProcedure(company: CompanyContext, input: DashboardProcedurePreviewDto) {
-    const procedure = await this.repository.inspectProcedure(company, input.procedureName);
+  async previewProcedure(company: CompanyContext, input: DashboardProcedurePreviewDto, requestId?: string) {
+    const procedure = await this.repository.inspectProcedure(company, input.procedureName, requestId);
     if (!procedure) {
       throw new AppError('El procedimiento no existe o no cumple el prefijo sp_dash_ requerido.', {
         statusCode: 404,

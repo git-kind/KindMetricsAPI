@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import type { FieldPacket } from 'mysql2/promise';
-import { procedureColumnsFromFields } from '../src/Database/SqlExecutor.js';
+import { describe, expect, it, vi } from 'vitest';
+import type { FieldPacket, Pool } from 'mysql2/promise';
+import { callStoredProcedure, procedureColumnsFromFields, setStoredProcedureLogger } from '../src/Database/SqlExecutor.js';
 
 describe('Stored Procedure result metadata', () => {
   it('maps MySQL field packets to dashboard result columns', () => {
@@ -30,5 +30,40 @@ describe('Stored Procedure result metadata', () => {
     expect(procedureColumnsFromFields(fields)).toEqual([
       { name: 'total_calls', type: 'INTEGER' },
     ]);
+  });
+});
+
+describe('Stored Procedure execution logging', () => {
+  it('logs the procedure, configured database user, and database without logging arguments', async () => {
+    const log = vi.fn();
+    const query = vi.fn().mockResolvedValue([[[]], []]);
+    const executor = {
+      pool: {
+        config: {
+          connectionConfig: {
+            host: '127.0.0.1',
+            port: 3306,
+            user: 'api_user',
+            database: 'kindmetrics',
+          },
+        },
+      },
+      query,
+    } as unknown as Pool;
+    setStoredProcedureLogger(log);
+
+    await callStoredProcedure(executor, 'sp_dashboard_list', ['sensitive-argument']);
+
+    expect(log).toHaveBeenCalledWith(
+      {
+        procedure: 'sp_dashboard_list',
+        databaseHost: '127.0.0.1',
+        databasePort: '3306',
+        databaseUser: 'api_user',
+        database: 'kindmetrics',
+      },
+      'Executing stored procedure',
+    );
+    expect(JSON.stringify(log.mock.calls)).not.toContain('sensitive-argument');
   });
 });

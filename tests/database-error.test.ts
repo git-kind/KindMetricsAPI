@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import { describe, expect, it } from 'vitest';
+import { AppError } from '../src/Errors/AppError.js';
 import { handleApiError } from '../src/Middleware/ErrorHandler.js';
 
 describe('database connection errors', () => {
@@ -23,6 +24,39 @@ describe('database connection errors', () => {
         errors: [{ code: 'DATABASE_UNAVAILABLE' }],
       });
       expect(response.body).not.toContain('ECONNREFUSED');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('includes safe execution context in structured application errors', async () => {
+    const app = Fastify({ logger: false });
+    app.setErrorHandler(handleApiError);
+    app.get('/panel', async () => {
+      throw new AppError('Panel execution failed.', {
+        statusCode: 502,
+        code: 'DASHBOARD_PANEL_EXECUTION_FAILED',
+        context: {
+          panelName: 'Teams Calls',
+          procedureName: 'sp_dash_Teams_Calls',
+          database: 'pozolito',
+          parameters: [{ name: 'p_from', value: '2026-11-24' }],
+        },
+      });
+    });
+
+    try {
+      const response = await app.inject({ method: 'GET', url: '/panel' });
+      expect(response.statusCode).toBe(502);
+      expect(response.json().errors[0]).toMatchObject({
+        code: 'DASHBOARD_PANEL_EXECUTION_FAILED',
+        context: {
+          panelName: 'Teams Calls',
+          procedureName: 'sp_dash_Teams_Calls',
+          database: 'pozolito',
+          parameters: [{ name: 'p_from', value: '2026-11-24' }],
+        },
+      });
     } finally {
       await app.close();
     }

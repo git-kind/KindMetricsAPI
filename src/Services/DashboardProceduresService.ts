@@ -7,6 +7,18 @@ import { actorId as resolveActorId } from '../Repositories/StoredProcedures/Acto
 
 function persistenceError(error: unknown): never {
   const message = error && typeof error === 'object' && 'sqlMessage' in error && typeof error.sqlMessage === 'string' ? error.sqlMessage : '';
+  const errorCode = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+  const errorNumber = error && typeof error === 'object' && 'errno' in error ? error.errno : undefined;
+  if (
+    errorCode === 'ER_NO_DEFAULT_FOR_FIELD' ||
+    errorNumber === 1364 ||
+    message.includes("Field 'id' doesn't have a default value")
+  ) {
+    throw new AppError(
+      'El catálogo de procedimientos requiere la migración 0012-dashboard-procedure-id-auto-increment.sql en la base central KindMetricsData.',
+      { statusCode: 503, code: 'DASHBOARD_PROCEDURE_CATALOG_MIGRATION_REQUIRED' },
+    );
+  }
   if (message.includes('DASHBOARD_PROCEDURE_NOT_FOUND'))
     throw new AppError('El procedimiento autorizado no existe.', { statusCode: 404, code: 'DASHBOARD_PROCEDURE_NOT_FOUND' });
   if (message.includes('DASHBOARD_PROCEDURE_IN_USE'))
@@ -30,8 +42,17 @@ export class DashboardProceduresService {
     try {
       const actor = await resolveActorId(userGuid);
       const discovered = await this.metadataRepository.discoverProcedures(company);
+      const availableProcedureNames = new Set(
+        discovered
+          .filter(
+            (procedure) =>
+              procedure.executable &&
+              /^sp_dash_[a-zA-Z0-9_]{1,112}$/.test(procedure.procedureName),
+          )
+          .map((procedure) => procedure.procedureName),
+      );
       for (const procedure of discovered) {
-        if (procedure.executable && /^sp_dash_[a-zA-Z0-9_]{1,112}$/.test(procedure.procedureName)) {
+        if (availableProcedureNames.has(procedure.procedureName)) {
           await this.repository.syncDiscoveredProcedure(
             company,
             procedure.procedureName,
@@ -47,7 +68,12 @@ export class DashboardProceduresService {
           );
         }
       }
-      return await this.repository.list(company, true);
+      const catalogProcedures = await this.repository.list(company, true);
+      return catalogProcedures.filter(
+        (procedure) =>
+          procedure.status === 'ACTIVE' &&
+          availableProcedureNames.has(procedure.procedureName),
+      );
     } catch (error) {
       return persistenceError(error);
     }

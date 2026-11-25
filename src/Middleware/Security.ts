@@ -12,6 +12,7 @@ declare module 'fastify' {
 }
 
 const companyCodePattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,39}$/;
+const kindTechDatabaseCode = 'k1ndt3ch';
 
 export async function resolveKindTechContext(request: FastifyRequest): Promise<void> {
   request.company = {
@@ -53,17 +54,38 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
 
 export async function resolveCompany(request: FastifyRequest, reply: FastifyReply) {
   request.company = undefined;
-  const code = request.headers['x-company-code'];
+  const code = request.headers['x-code-company'] ?? request.headers['x-company-code'];
   if (typeof code !== 'string' || !companyCodePattern.test(code)) {
     return reply
       .code(400)
       .send(
         buildErrorResponse(
           'Existen errores de validación.',
-          [createError('COMPANY_CODE_REQUIRED', 'El header x-company-code es requerido y debe contener un código válido.', 'x-company-code')],
+          [createError('COMPANY_CODE_REQUIRED', 'El header x-code-company es requerido y debe contener un código válido.', 'x-code-company')],
           request.id,
         ),
       );
+  }
+
+  if (code.toLowerCase() === kindTechDatabaseCode) {
+    if (!request.principal!.platformAdmin) {
+      return reply
+        .code(403)
+        .send(
+          buildErrorResponse(
+            'Acceso denegado.',
+            [createError('KINDTECH_DATABASE_ACCESS_DENIED', 'Solo la administración de KindTech puede consultar procedimientos de la base principal.')],
+            request.id,
+          ),
+        );
+    }
+
+    request.company = {
+      guid: '00000000-0000-4000-8000-000000000000',
+      id: 0,
+      code: kindTechDatabaseCode,
+    };
+    return;
   }
 
   const company = await resolveCompanyByCode(code);

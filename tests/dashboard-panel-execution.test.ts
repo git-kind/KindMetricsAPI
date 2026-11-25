@@ -141,6 +141,7 @@ describe('Dashboard Panel execution', () => {
       code: 'ER_BAD_FIELD_ERROR',
       errno: 1054,
       sqlState: '42S22',
+      databaseName: 'pozolito',
     });
     const { service, repository } = createService();
     vi.mocked(repository.execute).mockRejectedValue(databaseError);
@@ -150,6 +151,28 @@ describe('Dashboard Panel execution', () => {
     ).rejects.toMatchObject({
       code: 'DASHBOARD_PANEL_EXECUTION_FAILED',
       cause: databaseError,
+    });
+  });
+
+  it('includes panel and procedure context in execution failures', async () => {
+    const databaseError = Object.assign(new Error('Missing table'), {
+      code: 'ER_NO_SUCH_TABLE',
+      databaseName: 'pozolito',
+    });
+    const { service, repository } = createService();
+    vi.mocked(repository.execute).mockRejectedValue(databaseError);
+
+    await expect(
+      service.execute(company, dashboardGuid, tabGuid, panelGuid, {}, userGuid, 'Teams Calls'),
+    ).rejects.toMatchObject({
+      code: 'DASHBOARD_PANEL_EXECUTION_FAILED',
+      context: {
+        panelName: 'Teams Calls',
+        panelGuid,
+        procedureName: 'sp_dash_AVG_Calls_Duration',
+        database: 'pozolito',
+        parameters: [],
+      },
     });
   });
 });

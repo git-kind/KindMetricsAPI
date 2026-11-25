@@ -3,6 +3,56 @@ import type { FieldPacket, Pool, PoolConnection, RowDataPacket } from 'mysql2/pr
 
 type SqlExecutor = Pool | PoolConnection;
 
+type StoredProcedureLogger = (fields: Record<string, string>, message: string) => void;
+
+let storedProcedureLogger: StoredProcedureLogger = (fields, message) => console.info(message, fields);
+
+type ExecutorConnectionConfig = {
+  user?: string;
+  database?: string;
+  host?: string;
+  port?: number;
+};
+
+function getExecutorConnectionConfig(executor: SqlExecutor): ExecutorConnectionConfig {
+  const candidate = executor as unknown as {
+    config?: ExecutorConnectionConfig;
+    pool?: { config?: { connectionConfig?: ExecutorConnectionConfig } };
+    connection?: { config?: ExecutorConnectionConfig };
+  };
+  return candidate.config
+    ?? candidate.pool?.config?.connectionConfig
+    ?? candidate.connection?.config
+    ?? {};
+}
+
+export function getExecutorDatabaseName(executor: SqlExecutor): string | undefined {
+  return getExecutorConnectionConfig(executor).database;
+}
+
+export function setStoredProcedureLogger(logger: StoredProcedureLogger): void {
+  storedProcedureLogger = logger;
+}
+
+export function logDatabaseConnection(
+  executor: SqlExecutor,
+  message: string,
+  context: Record<string, string> = {},
+): void {
+  const config = getExecutorConnectionConfig(executor);
+  storedProcedureLogger({
+    ...context,
+    databaseHost: config.host ?? '(unknown)',
+    databasePort: String(config.port ?? '(unknown)'),
+    databaseUser: config.user ?? '(unknown)',
+    database: config.database ?? '(unknown)',
+  }, message);
+}
+
+function logStoredProcedureExecution(executor: SqlExecutor, procedure: string): void {
+  logDatabaseConnection(executor, 'Executing stored procedure', { procedure });
+}
+
 export type ProcedureResultColumn = {
   name: string;
   type: 'STRING' | 'NUMBER' | 'INTEGER' | 'DATE' | 'DATETIME';
@@ -54,6 +104,7 @@ export async function callStoredProcedure<T>(
   if (!/^sp_[a-zA-Z0-9_]+$/.test(procedure)) {
     throw new Error('Invalid stored procedure name');
   }
+  logStoredProcedureExecution(executor, procedure);
   const placeholders = args.map(() => '?').join(',');
   const [result] = await executor.query<RowDataPacket[][]>(
     {
@@ -121,6 +172,7 @@ export async function executeReadOnlyProcedureWithMetadata(
     if (!/^sp_dash_[a-zA-Z0-9_]{1,112}$/.test(procedure)) {
       throw new Error('Invalid dashboard procedure name');
     }
+    logStoredProcedureExecution(connection, procedure);
     const placeholders = params.map(() => '?').join(',');
     const [result, fields] = await connection.query<RowDataPacket[][]>(
       {

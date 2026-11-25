@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createDashboardSchema, dashboardFiltersSchema, duplicateDashboardSchema, updateDashboardSchema } from '../src/Models/Dashboards/DashboardDto.js';
 import { createDashboardTabSchema, reorderDashboardTabsSchema } from '../src/Models/Dashboards/DashboardTabDto.js';
-import { createDashboardPanelSchema, saveDashboardPanelLayoutSchema } from '../src/Models/Dashboards/DashboardPanelDto.js';
-import { executeDashboardPanelSchema } from '../src/Models/Dashboards/DashboardPanelDto.js';
+import {
+  createDashboardPanelSchema,
+  dashboardPanelExecutionApiResponseSchema,
+  executeDashboardPanelSchema,
+  saveDashboardPanelLayoutSchema,
+} from '../src/Models/Dashboards/DashboardPanelDto.js';
 import { createDashboardProcedureSchema, updateDashboardProcedureSchema } from '../src/Models/DashboardProcedures/DashboardProcedureDto.js';
 import { dashboardProcedurePreviewSchema, dashboardSchemaQuerySchema } from '../src/Models/DashboardMetadata/DashboardMetadataDto.js';
 
@@ -631,11 +635,31 @@ describe('Dashboard DTOs', () => {
   });
 
   it('validates panel execution filters and procedure parameter contracts', () => {
-    expect(executeDashboardPanelSchema.parse({ filters: { dateFrom: '2026-10-01', serviceId: 'svc-1' } })).toMatchObject({
+    expect(executeDashboardPanelSchema.parse({
+      panelName: 'Teams Calls',
+      filters: { dateFrom: '2026-10-01', serviceId: 'svc-1' },
+    })).toMatchObject({
+      panelName: 'Teams Calls',
       filters: { dateFrom: '2026-10-01', serviceId: 'svc-1' },
     });
     expect(executeDashboardPanelSchema.safeParse({ filters: { 'bad filter': 'x' } }).success).toBe(false);
     expect(executeDashboardPanelSchema.safeParse({ filters: {}, procedureName: 'sp_dashboard_any' }).success).toBe(false);
+    expect(dashboardPanelExecutionApiResponseSchema.safeParse({
+      success: false,
+      message: 'Execution failed',
+      data: null,
+      errors: [{
+        code: 'DASHBOARD_PANEL_EXECUTION_FAILED',
+        message: 'Execution failed',
+        context: {
+          panelName: 'Teams Calls',
+          procedureName: 'sp_dash_Teams_Calls',
+          database: 'pozolito',
+          parameters: [{ name: 'p_from', value: '2026-11-24' }],
+        },
+      }],
+      meta: { requestId: 'req-test' },
+    }).success).toBe(true);
 
     const catalogEntry = {
       procedureName: 'sp_dash_calls_summary',

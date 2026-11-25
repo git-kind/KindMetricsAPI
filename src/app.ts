@@ -5,6 +5,7 @@ import jwt from '@fastify/jwt';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import { validatorCompiler, serializerCompiler, jsonSchemaTransform } from 'fastify-type-provider-zod';
+import { setStoredProcedureLogger } from './Database/SqlExecutor.js';
 import { buildSuccessResponse } from './Helpers/ResponseHelper.js';
 import { handleApiError } from './Middleware/ErrorHandler.js';
 import { registerApiRoutes } from './Routes/ApiRoutes.js';
@@ -21,6 +22,8 @@ function isLocalDevelopmentOrigin(origin: string): boolean {
 export async function buildApp() {
   const app = Fastify({
     logger: {
+      base: null,
+      timestamp: () => `,"time":"${new Date(Date.now() - 6 * 60 * 60 * 1_000).toISOString().replace('Z', '-06:00')}"`,
       redact: [
         'req.headers.authorization',
         'req.headers.cookie',
@@ -29,6 +32,7 @@ export async function buildApp() {
       ],
     },
   });
+  setStoredProcedureLogger((fields, message) => app.log.info(fields, message));
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   const secret = process.env.JWT_SECRET;
@@ -51,7 +55,7 @@ export async function buildApp() {
       callback(null, !origin || allowedOrigins.has(origin) || (isDevelopment && isLocalDevelopmentOrigin(origin)));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Company-Code'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Code-Company', 'X-Company-Code'],
     credentials: true,
   });
   await app.register(cookie);
@@ -62,7 +66,7 @@ export async function buildApp() {
       components: {
         securitySchemes: {
           bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-          companyCode: { type: 'apiKey', in: 'header', name: 'x-company-code' },
+          companyCode: { type: 'apiKey', in: 'header', name: 'x-code-company' },
         },
       },
     },

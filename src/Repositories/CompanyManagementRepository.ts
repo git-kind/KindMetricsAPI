@@ -3,7 +3,6 @@ import type { RowDataPacket } from 'mysql2';
 import { AppError } from '../Errors/AppError.js';
 import type { CompanyManagementDto } from '../Models/Companies/CompanyManagementDto.js';
 import { companyCredentialService } from '../Services/CompanyCredentialService.js';
-import { companyDatabaseInitializer } from '../Services/CompanyDatabaseInitializer.js';
 import { callRows } from './StoredProcedures/ProcedureExecutor.js';
 
 type CompanyRow = RowDataPacket & {
@@ -312,45 +311,6 @@ export async function provisionCompanyDatabase(
     });
   }
 
-  if (provisionedCompany.status.trim().toUpperCase() === 'ACTIVE') {
-    try {
-      await callRows<CompanyRow>('sp_company_management_deactivate', [companyId]);
-    } catch (error) {
-      throw new AppError(
-        'Los procedimientos de aprovisionamiento están desactualizados y no se pudo dejar inactiva la empresa. Aplica DataBaseScripts/0011-company-provisioning-procedure.sql.',
-        {
-          statusCode: 503,
-          code: 'COMPANY_PROCEDURE_MIGRATION_REQUIRED',
-          cause: error,
-        },
-      );
-    }
-    throw new AppError(
-      'Los procedimientos de aprovisionamiento están desactualizados. Aplica DataBaseScripts/0011-company-provisioning-procedure.sql y reintenta con las mismas credenciales.',
-      {
-        statusCode: 503,
-        code: 'COMPANY_PROCEDURE_MIGRATION_REQUIRED',
-      },
-    );
-  }
-
-  try {
-    await companyDatabaseInitializer.initialize({
-      database: input.database_name,
-      username: input.database_user,
-      password: input.database_password,
-    });
-  } catch (error) {
-    throw new AppError(
-      'La base y el usuario fueron creados, pero no se pudieron instalar las tablas y procedimientos de Dashboards. La empresa permanece inactiva; corrige la causa y reintenta el mismo endpoint con las mismas credenciales.',
-      {
-        statusCode: 503,
-        code: 'COMPANY_DATABASE_INITIALIZATION_FAILED',
-        cause: error,
-      },
-    );
-  }
-
   try {
     const [activeCompany] = await callRows<CompanyRow>('sp_company_management_update', [
       companyId,
@@ -358,7 +318,7 @@ export async function provisionCompanyDatabase(
       null,
     ]);
     if (!activeCompany) {
-      throw new AppError('No fue posible activar la empresa después de inicializar su base de datos.', {
+      throw new AppError('No fue posible activar la empresa después de crear su base de datos.', {
         statusCode: 503,
         code: 'COMPANY_DATABASE_ACTIVATION_FAILED',
       });

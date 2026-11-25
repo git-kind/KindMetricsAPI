@@ -42,7 +42,7 @@ describe('Company context resolution', () => {
     vi.clearAllMocks();
   });
 
-  it('requires x-company-code and rejects the legacy GUID header', async () => {
+  it('requires a company code and rejects the legacy GUID header', async () => {
     const request = {
       headers: { 'x-company-guid': '123e4567-e89b-12d3-a456-426614174000' },
       principal: { sub: 'user-guid', platformAdmin: false },
@@ -55,6 +55,35 @@ describe('Company context resolution', () => {
     expect(state.status).toBe(400);
     expect(resolveCompanyByCode).not.toHaveBeenCalled();
     expect(companyAccess).not.toHaveBeenCalled();
+  });
+
+  it('routes k1ndt3ch to the central database context', async () => {
+    const request = {
+      headers: { 'x-code-company': 'k1ndt3ch' },
+      principal: { sub: 'user-guid', platformAdmin: true },
+      id: 'test-request',
+    } as unknown as FastifyRequest;
+    const { reply } = replyDouble();
+
+    await resolveCompany(request, reply);
+
+    expect(resolveCompanyByCode).not.toHaveBeenCalled();
+    expect(request.company).toEqual({
+      id: 0,
+      guid: '00000000-0000-4000-8000-000000000000',
+      code: 'k1ndt3ch',
+    });
+  });
+
+  it('does not expose the central database context to company users', async () => {
+    const request = requestWith('k1ndt3ch');
+    const { reply, state } = replyDouble();
+
+    await resolveCompany(request, reply);
+
+    expect(state.status).toBe(403);
+    expect(resolveCompanyByCode).not.toHaveBeenCalled();
+    expect(request.company).toBeUndefined();
   });
 
   it('does not resolve malformed codes from the administrative catalog', async () => {

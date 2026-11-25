@@ -49,11 +49,17 @@ describe('Dashboard procedures service', () => {
     } as unknown as DashboardMetadataRepository;
     const repository = {
       syncDiscoveredProcedure: vi.fn(),
-      list: vi.fn().mockResolvedValue([]),
+      list: vi.fn().mockResolvedValue([
+        { procedureName: 'sp_dash_no_args', status: 'ACTIVE' },
+        { procedureName: 'sp_dash_with_args', status: 'ACTIVE' },
+        { procedureName: 'sp_dash_with_output', status: 'ACTIVE' },
+        { procedureName: 'sp_dash_definer', status: 'ACTIVE' },
+        { procedureName: 'sp_dash_other_company_only', status: 'ACTIVE' },
+      ]),
     } as unknown as DashboardProcedureRepository;
     const service = new DashboardProceduresService(repository, metadataRepository);
 
-    await service.list(company, 'user-guid');
+    const result = await service.list(company, 'user-guid');
 
     expect(repository.syncDiscoveredProcedure).toHaveBeenCalledTimes(3);
     expect(repository.syncDiscoveredProcedure).toHaveBeenCalledWith(
@@ -87,5 +93,38 @@ describe('Dashboard procedures service', () => {
       42,
     );
     expect(repository.list).toHaveBeenCalledWith(company, true);
+    expect(result.map((procedure) => procedure.procedureName)).toEqual([
+      'sp_dash_no_args',
+      'sp_dash_with_args',
+      'sp_dash_definer',
+    ]);
+  });
+
+  it('reports the missing dashboard procedure id migration clearly', async () => {
+    const metadataRepository = {
+      discoverProcedures: vi.fn().mockResolvedValue([
+        {
+          procedureName: 'sp_dash_no_args',
+          securityType: 'INVOKER',
+          executable: true,
+          parameters: [],
+        },
+      ]),
+    } as unknown as DashboardMetadataRepository;
+    const repository = {
+      syncDiscoveredProcedure: vi.fn().mockRejectedValue({
+        code: 'ER_NO_DEFAULT_FOR_FIELD',
+        errno: 1364,
+        sqlMessage: "Field 'id' doesn't have a default value",
+      }),
+      list: vi.fn(),
+    } as unknown as DashboardProcedureRepository;
+    const service = new DashboardProceduresService(repository, metadataRepository);
+
+    await expect(service.list(company, 'user-guid')).rejects.toMatchObject({
+      statusCode: 503,
+      code: 'DASHBOARD_PROCEDURE_CATALOG_MIGRATION_REQUIRED',
+      message: expect.stringContaining('0012-dashboard-procedure-id-auto-increment.sql'),
+    });
   });
 });

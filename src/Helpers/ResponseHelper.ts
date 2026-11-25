@@ -1,7 +1,17 @@
 import type { ApiError, ApiResponse, ApiResponsePagination } from '../Models/ApiResponse.js';
 
-export function createError(code: string, message: string, field?: string): ApiError {
-  return field ? { code, message, field } : { code, message };
+export function createError(
+  code: string,
+  message: string,
+  field?: string,
+  context?: Record<string, unknown>,
+): ApiError {
+  return {
+    code,
+    message,
+    ...(field ? { field } : {}),
+    ...(context ? { context } : {}),
+  };
 }
 
 export function buildPagination(page: number, pageSize: number, total: number): ApiResponsePagination {

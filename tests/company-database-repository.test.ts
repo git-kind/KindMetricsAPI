@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   getPool: vi.fn(),
   callStoredProcedure: vi.fn(),
+  executeReadOnlyProcedureWithMetadata: vi.fn(),
+  getExecutorDatabaseName: vi.fn(),
 }));
 
 vi.mock('../src/Services/CompanyConnectionService.js', () => ({
@@ -11,6 +13,8 @@ vi.mock('../src/Services/CompanyConnectionService.js', () => ({
 
 vi.mock('../src/Database/SqlExecutor.js', () => ({
   callStoredProcedure: mocks.callStoredProcedure,
+  executeReadOnlyProcedureWithMetadata: mocks.executeReadOnlyProcedureWithMetadata,
+  getExecutorDatabaseName: mocks.getExecutorDatabaseName,
 }));
 
 import { CompanyDatabaseRepository } from '../src/Repositories/CompanyDatabaseRepository.js';
@@ -25,7 +29,8 @@ describe('CompanyDatabaseRepository connection errors', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getPool.mockResolvedValue({});
+    mocks.getPool.mockResolvedValue({ database: 'pozolito' });
+    mocks.getExecutorDatabaseName.mockReturnValue('pozolito');
   });
 
   it('returns an actionable 503 when MySQL rejects the company credentials', async () => {
@@ -36,6 +41,26 @@ describe('CompanyDatabaseRepository connection errors', () => {
     await expect(repository.callRows(company, 'sp_dashboard_list')).rejects.toMatchObject({
       statusCode: 503,
       code: 'COMPANY_DATABASE_CREDENTIALS_INVALID',
+    });
+  });
+
+  it('reports when an authorized dashboard procedure is missing from the company database', async () => {
+    mocks.executeReadOnlyProcedureWithMetadata.mockRejectedValue({
+      code: 'ER_SP_DOES_NOT_EXIST',
+    });
+
+    await expect(
+      repository.executeReadOnlyProcedureWithMetadata(
+        company,
+        'sp_dash_Missing',
+        [],
+        30,
+      ),
+    ).rejects.toMatchObject({
+      statusCode: 404,
+      code: 'COMPANY_DASHBOARD_PROCEDURE_NOT_FOUND',
+      message: 'El procedimiento autorizado no existe en la base de datos de la empresa.',
+      cause: { databaseName: 'pozolito' },
     });
   });
 

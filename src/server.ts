@@ -24,6 +24,12 @@ const urlHost = ['0.0.0.0', '::'].includes(host) ? 'localhost' : host;
 const urlHostFormatted = urlHost.includes(':') ? `[${urlHost}]` : urlHost;
 const baseUrl = `http://${urlHostFormatted}:${port}`;
 const app = await buildApp();
+app.log.info({
+  databaseHost: process.env.MYSQL_HOST ?? '127.0.0.1',
+  databasePort: Number(process.env.MYSQL_PORT ?? 3306),
+  databaseUser: process.env.MYSQL_USER ?? '(not configured)',
+  database: process.env.MYSQL_DATABASE ?? 'kindmetrics',
+}, 'Using MySQL connection configuration');
 try {
   await app.listen({ port, host });
 } catch (error) {

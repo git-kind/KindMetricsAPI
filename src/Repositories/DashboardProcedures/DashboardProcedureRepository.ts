@@ -50,44 +50,10 @@ export class DashboardProcedureRepository {
          guid, procedure_name, description, parameters_schema, result_schema, status,
          execution_timeout_seconds, version, created_by
        )
-       SELECT UUID(), ?, NULL, ?,
+       VALUES (
+         UUID(), ?, NULL, ?,
          JSON_OBJECT('schemaVersion', 1, 'columns', JSON_ARRAY()),
          'ACTIVE', 30, 1, ?
-       WHERE EXISTS (
-         SELECT 1 FROM information_schema.ROUTINES
-         WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = ?
-           AND ROUTINE_TYPE = 'PROCEDURE'
-       )
-       AND (
-         SELECT COUNT(*) FROM information_schema.PARAMETERS
-         WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = ?
-       ) = JSON_LENGTH(JSON_EXTRACT(?, '$.parameters'))
-       AND (
-         SELECT COUNT(*) FROM information_schema.PARAMETERS
-         WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = ? AND PARAMETER_MODE = 'IN'
-       ) = JSON_LENGTH(JSON_EXTRACT(?, '$.parameters'))
-       AND NOT EXISTS (
-         SELECT 1
-         FROM JSON_TABLE(?, '$.parameters[*]' COLUMNS(
-           ordinal FOR ORDINALITY,
-           parameter_name VARCHAR(64) PATH '$.name',
-           parameter_type VARCHAR(20) PATH '$.type'
-         )) expected
-         LEFT JOIN information_schema.PARAMETERS actual
-           ON actual.SPECIFIC_SCHEMA = DATABASE()
-           AND actual.SPECIFIC_NAME = ?
-           AND actual.ORDINAL_POSITION = expected.ordinal
-         WHERE actual.PARAMETER_NAME IS NULL OR expected.parameter_name <> actual.PARAMETER_NAME
-           OR (expected.parameter_type = 'STRING' AND actual.DATA_TYPE NOT IN ('char','varchar','tinytext','text','mediumtext','longtext'))
-           OR (expected.parameter_type = 'NUMBER' AND actual.DATA_TYPE NOT IN ('decimal','float','double'))
-           OR (expected.parameter_type = 'INTEGER' AND actual.DATA_TYPE NOT IN ('tinyint','smallint','mediumint','int','bigint'))
-           OR (expected.parameter_type = 'BOOLEAN' AND actual.DATA_TYPE NOT IN ('tinyint','bit','boolean'))
-           OR (expected.parameter_type = 'DATE' AND actual.DATA_TYPE <> 'date')
-           OR (expected.parameter_type = 'DATETIME' AND actual.DATA_TYPE NOT IN ('datetime','timestamp'))
-       )
-       AND NOT EXISTS (
-         SELECT 1 FROM information_schema.PARAMETERS
-         WHERE SPECIFIC_SCHEMA = DATABASE() AND SPECIFIC_NAME = ? AND PARAMETER_MODE <> 'IN'
        )
        ON DUPLICATE KEY UPDATE
          id = LAST_INSERT_ID(id),
@@ -102,14 +68,6 @@ export class DashboardProcedureRepository {
         procedureName,
         serializedParameters,
         actor,
-        procedureName,
-        procedureName,
-        serializedParameters,
-        procedureName,
-        serializedParameters,
-        serializedParameters,
-        procedureName,
-        procedureName,
         actor,
       ],
     );
@@ -121,11 +79,6 @@ export class DashboardProcedureRepository {
        FROM dashboard_procedures
        WHERE procedure_name = ? AND status = 'ACTIVE'
          AND JSON_EXTRACT(parameters_schema, '$') = JSON_EXTRACT(?, '$')
-         AND EXISTS (
-           SELECT 1 FROM information_schema.ROUTINES
-           WHERE ROUTINE_SCHEMA = DATABASE() AND ROUTINE_NAME = dashboard_procedures.procedure_name
-             AND ROUTINE_TYPE = 'PROCEDURE'
-         )
        LIMIT 1`,
       [procedureName, serializedParameters],
     );

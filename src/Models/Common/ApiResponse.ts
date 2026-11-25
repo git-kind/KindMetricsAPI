@@ -2,6 +2,7 @@ export interface ApiError {
   code: string;
   message: string;
   field?: string;
+  context?: Record<string, unknown>;
 }
 
 export interface ApiResponsePagination {

@@ -24,14 +24,23 @@ describe('Dashboard routes', () => {
       expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs/{tabGuid}/panels/{panelGuid}/execute']).toBeDefined();
       expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs/{tabGuid}/panels/layout']).toBeDefined();
       expect(openapi.paths['/api/v1/dashboard-procedures'].get).toBeDefined();
+      expect(openapi.paths['/api/v1/dashboard-procedures'].get.security).toEqual([
+        { bearerAuth: [], companyCode: [] },
+      ]);
       expect(openapi.paths['/api/v1/dashboard-procedures/{guid}'].patch).toBeDefined();
       expect(openapi.paths['/api/v1/dashboard-metadata/schema'].get).toBeDefined();
       expect(openapi.paths['/api/v1/dashboard-metadata/procedures'].get).toBeDefined();
       expect(openapi.paths['/api/v1/dashboard-metadata/procedures/validate'].post).toBeDefined();
       expect(openapi.paths['/api/v1/dashboard-metadata/procedures/preview'].post).toBeDefined();
+      expect(openapi.paths['/api/v1/dashboard-metadata/procedures'].get.security).toEqual([
+        { bearerAuth: [], companyCode: [] },
+      ]);
+      expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs/{tabGuid}/panels/{panelGuid}/execute'].post.security).toEqual([
+        { bearerAuth: [], companyCode: [] },
+      ]);
       expect(openapi.paths['/api/v1/dashboards/{dashboardGuid}/tabs'].get.responses['200']).toBeDefined();
       expect(openapi.paths['/api/v1/dashboards'].get.responses['503']).toBeDefined();
-      expect(openapi.components.securitySchemes.companyCode.name).toBe('x-company-code');
+      expect(openapi.components.securitySchemes.companyCode.name).toBe('x-code-company');
       expect(openapi.paths['/api/v1/dashboards'].get.security).toEqual([{ bearerAuth: [] }]);
 
       const unauthenticated = await app.inject({ method: 'GET', url: '/api/v1/dashboards' });

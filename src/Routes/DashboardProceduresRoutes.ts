@@ -3,6 +3,8 @@ import { dashboardProceduresController } from '../Controllers/DashboardProcedure
 import {
   authenticate,
   requireKindTechDashboardAdmin,
+  resolveCompany,
+  resolveDashboardReadAccess,
   resolveKindTechContext,
   resolveKindTechDashboardReadAccess,
 } from '../Middleware/Security.js';
@@ -15,14 +17,16 @@ import {
 } from '../Models/DashboardProcedures/DashboardProcedureDto.js';
 
 const read = [authenticate, resolveKindTechContext, resolveKindTechDashboardReadAccess] as const;
+const companyRead = [authenticate, resolveCompany, resolveDashboardReadAccess] as const;
 const write = [authenticate, resolveKindTechContext, requireKindTechDashboardAdmin] as const;
 const security = [{ bearerAuth: [] }];
+const companySecurity = [{ bearerAuth: [], companyCode: [] }];
 const tags = ['Dashboard Procedures'];
 
 export async function dashboardProceduresRoutes(app: FastifyInstance) {
   app.get(
     '/dashboard-procedures',
-    { preHandler: [...read], schema: { tags, security, response: { 200: dashboardProcedureListApiResponseSchema } } },
+    { preHandler: [...companyRead], schema: { tags, security: companySecurity, response: { 200: dashboardProcedureListApiResponseSchema } } },
     (request, reply) => dashboardProceduresController.list(request, reply),
   );
   app.get(

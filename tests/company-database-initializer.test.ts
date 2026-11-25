@@ -97,10 +97,15 @@ describe('CompanyDatabaseInitializer', () => {
     const procedureUpdate = statements.find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_procedure_update'));
     const panelCreate = [...statements].reverse().find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_panel_create'));
     const panelUpdate = [...statements].reverse().find((statement) => statement.includes('CREATE PROCEDURE sp_dashboard_panel_update'));
-    const panelIdMigration = statements.find((statement) => statement.includes('MODIFY COLUMN id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT'));
+    const procedureIdMigration = statements.find(
+      (statement) =>
+        statement.includes('ALTER TABLE dashboard_procedures') &&
+        statement.includes('MODIFY COLUMN id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT'),
+    );
     expect(statements.indexOf(panelCreate!)).toBeGreaterThan(statementIndexes[statementIndexes.length - 1]!);
-    expect(panelIdMigration).toBeDefined();
-    expect(statements.indexOf(panelIdMigration!)).toBeLessThan(statements.indexOf(panelCreate!));
+    expect(procedureIdMigration).toBeDefined();
+    expect(statements.indexOf(procedureIdMigration!)).toBeGreaterThan(statementIndexes[statementIndexes.length - 1]!);
+    expect(statements.indexOf(procedureIdMigration!)).toBeGreaterThan(statements.indexOf(panelCreate!));
     expect(panelCreate).toContain("v_procedure_id IS NOT NULL AND");
     expect(panelCreate).not.toContain("v_procedure_id IS NULL OR JSON_TYPE(JSON_EXTRACT(p_payload, '$.procedureParams'))");
     expect(panelUpdate).toContain("v_procedure_id IS NULL");

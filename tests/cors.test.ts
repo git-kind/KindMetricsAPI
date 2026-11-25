@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 describe('CORS configuration', () => {
-  it('allows local development preflight requests for PATCH and company headers', async () => {
+  it('allows local development preflight requests for company code headers', async () => {
     process.env.JWT_SECRET = 'test-secret-with-more-than-32-bytes';
     process.env.NODE_ENV = 'dev';
     const app = await buildApp();
@@ -33,14 +33,14 @@ describe('CORS configuration', () => {
         headers: {
           origin: 'http://localhost:5173',
           'access-control-request-method': 'PATCH',
-          'access-control-request-headers': 'authorization,x-company-code',
+          'access-control-request-headers': 'authorization,x-code-company',
         },
       });
 
       expect(response.statusCode).toBe(204);
       expect(response.headers['access-control-allow-origin']).toBe('http://localhost:5173');
       expect(response.headers['access-control-allow-methods']).toContain('PATCH');
-      expect(response.headers['access-control-allow-headers']).toContain('X-Company-Code');
+      expect(response.headers['access-control-allow-headers']).toContain('X-Code-Company');
     } finally {
       await app.close();
     }

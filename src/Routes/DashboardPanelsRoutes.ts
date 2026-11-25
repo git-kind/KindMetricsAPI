@@ -67,7 +67,7 @@ export async function dashboardPanelsRoutes(app: FastifyInstance) {
   app.post(
     '/dashboards/:dashboardGuid/tabs/:tabGuid/panels/:panelGuid/execute',
     {
-      preHandler: [...centralWrite],
+      preHandler: [...execute],
       schema: {
         tags,
         security: executionSecurity,

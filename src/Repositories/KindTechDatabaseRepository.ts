@@ -4,10 +4,15 @@ import { pool } from '../Config/DatabaseConfig.js';
 import {
   callStoredProcedure,
   executeReadOnlyProcedureWithMetadata,
+  logDatabaseConnection,
   type ProcedureResultColumn,
 } from '../Database/SqlExecutor.js';
 
 export class KindTechDatabaseRepository {
+  async logConnection(_company: CompanyContext, message: string, requestId?: string): Promise<void> {
+    logDatabaseConnection(pool, message, requestId ? { requestId } : {});
+  }
+
   async execute(_company: CompanyContext, sql: string, params: readonly (string | number | null | Buffer)[] = []) {
     const [result] = await pool.execute(sql, [...params]);
     return result;

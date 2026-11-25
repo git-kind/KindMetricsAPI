@@ -48,24 +48,14 @@ describe('Dashboard procedure repository', () => {
     expect(database.queryRows).toHaveBeenCalledTimes(2);
     const [, syncSql, syncParams] = vi.mocked(database.queryRows).mock.calls[0]!;
     expect(syncSql).toContain('INSERT INTO dashboard_procedures');
-    expect(syncSql).toContain('FROM information_schema.ROUTINES');
-    expect(syncSql).toContain('FROM information_schema.PARAMETERS');
-    expect(syncSql).toContain('JSON_TABLE');
-    expect(syncSql).toContain("actual.DATA_TYPE NOT IN ('datetime','timestamp')");
+    expect(syncSql).toContain('VALUES');
+    expect(syncSql).not.toContain('information_schema');
     expect(syncSql).not.toContain('SECURITY_TYPE');
     expect(syncSql).not.toContain('CALL sp_dashboard_procedure_sync_no_parameter');
     expect(syncParams).toEqual([
       'sp_dash_AVG_Calls_Duration',
       JSON.stringify(parametersSchema),
       42,
-      'sp_dash_AVG_Calls_Duration',
-      'sp_dash_AVG_Calls_Duration',
-      JSON.stringify(parametersSchema),
-      'sp_dash_AVG_Calls_Duration',
-      JSON.stringify(parametersSchema),
-      JSON.stringify(parametersSchema),
-      'sp_dash_AVG_Calls_Duration',
-      'sp_dash_AVG_Calls_Duration',
       42,
     ]);
 

@@ -2,6 +2,7 @@ import type { RowDataPacket } from 'mysql2';
 import type { CompanyContext } from '../Models/Common.js';
 import { AppError } from '../Errors/AppError.js';
 import type { DashboardSchemaQueryDto } from '../Models/DashboardMetadata/DashboardMetadataDto.js';
+import { CompanyDatabaseRepository } from './CompanyDatabaseRepository.js';
 import { KindTechDatabaseRepository } from './KindTechDatabaseRepository.js';
 
 type MetadataRow = RowDataPacket & Record<string, unknown>;
@@ -54,11 +55,21 @@ function routineParamMode(value: unknown): 'IN' | 'OUT' | 'INOUT' {
 }
 
 export class DashboardMetadataRepository {
-  constructor(private readonly database = new KindTechDatabaseRepository()) {}
+  constructor(
+    private readonly companyDatabase = new CompanyDatabaseRepository(),
+    private readonly catalogDatabase = new KindTechDatabaseRepository(),
+  ) {}
+
+  private metadataDatabase(company: CompanyContext) {
+    return company.code?.toLowerCase() === 'k1ndt3ch'
+      ? this.catalogDatabase
+      : this.companyDatabase;
+  }
 
   async schema(company: CompanyContext, query: DashboardSchemaQueryDto) {
+    const database = this.metadataDatabase(company);
     const tableFilter = query.tableName ?? null;
-    const tableRows = await this.database.queryRows<MetadataRow>(
+    const tableRows = await database.queryRows<MetadataRow>(
       company,
       `SELECT TABLE_NAME AS table_name, TABLE_TYPE AS table_type, ENGINE AS engine, TABLE_COMMENT AS table_comment
        FROM information_schema.TABLES
@@ -76,7 +87,7 @@ export class DashboardMetadataRepository {
 
     const tableNames = tableRows.map((row) => String(row.table_name));
     if (tableNames.length === 0) return { tables: [], columns: [], indexes: [], relationships: [] };
-    const columnRows = await this.database.queryRows<MetadataRow>(
+    const columnRows = await database.queryRows<MetadataRow>(
       company,
       `SELECT c.TABLE_NAME AS table_name, c.COLUMN_NAME AS column_name, c.ORDINAL_POSITION AS ordinal_position,
               c.DATA_TYPE AS data_type, c.COLUMN_TYPE AS column_type, c.IS_NULLABLE AS is_nullable,
@@ -86,7 +97,7 @@ export class DashboardMetadataRepository {
        ORDER BY c.TABLE_NAME, c.ORDINAL_POSITION`,
       tableNames,
     );
-    const indexRows = await this.database.queryRows<MetadataRow>(
+    const indexRows = await database.queryRows<MetadataRow>(
       company,
       `SELECT TABLE_NAME AS table_name, INDEX_NAME AS index_name, COALESCE(COLUMN_NAME, EXPRESSION) AS column_name,
               SEQ_IN_INDEX AS sequence_in_index, NON_UNIQUE AS non_unique
@@ -95,7 +106,7 @@ export class DashboardMetadataRepository {
        ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX`,
       tableNames,
     );
-    const relationshipRows = await this.database.queryRows<MetadataRow>(
+    const relationshipRows = await database.queryRows<MetadataRow>(
       company,
       `SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name, CONSTRAINT_NAME AS constraint_name,
               REFERENCED_TABLE_NAME AS referenced_table, REFERENCED_COLUMN_NAME AS referenced_column
@@ -141,7 +152,8 @@ export class DashboardMetadataRepository {
   }
 
   async discoverProcedures(company: CompanyContext) {
-    const routineRows = await this.database.queryRows<MetadataRow>(
+    const database = this.metadataDatabase(company);
+    const routineRows = await database.queryRows<MetadataRow>(
       company,
       `SELECT ROUTINE_NAME AS routine_name, SECURITY_TYPE AS security_type
        FROM information_schema.ROUTINES
@@ -149,7 +161,7 @@ export class DashboardMetadataRepository {
          AND ROUTINE_NAME REGEXP '^sp_dash_[A-Za-z0-9_]{1,112}$'
        ORDER BY ROUTINE_NAME`,
     );
-    const parameterRows = await this.database.queryRows<MetadataRow>(
+    const parameterRows = await database.queryRows<MetadataRow>(
       company,
       `SELECT p.SPECIFIC_NAME AS routine_name, p.PARAMETER_NAME AS parameter_name,
               p.DATA_TYPE AS data_type, p.DTD_IDENTIFIER AS column_type,
@@ -188,13 +200,15 @@ export class DashboardMetadataRepository {
     });
   }
 
-  async inspectProcedure(company: CompanyContext, procedureName: string) {
+  async inspectProcedure(company: CompanyContext, procedureName: string, requestId?: string) {
+    const database = this.metadataDatabase(company);
+    await database.logConnection(company, 'Inspecting dashboard procedure', requestId);
     const procedures = await this.discoverProcedures(company);
     return procedures.find((procedure) => procedure.procedureName === procedureName);
   }
 
   async getActiveProcedureResultSchema(company: CompanyContext, procedureName: string) {
-    const rows = await this.database.queryRows<MetadataRow>(
+    const rows = await this.catalogDatabase.queryRows<MetadataRow>(
       company,
       `SELECT result_schema
        FROM dashboard_procedures
@@ -211,7 +225,7 @@ export class DashboardMetadataRepository {
     procedureName: string,
     resultSchema: { schemaVersion: 1; columns: Array<{ name: string; type: string }> },
   ) {
-    const result = await this.database.execute(
+    const result = await this.catalogDatabase.execute(
       company,
       `UPDATE dashboard_procedures
        SET result_schema = ?
@@ -227,7 +241,21 @@ export class DashboardMetadataRepository {
   }
 
   async previewProcedure(company: CompanyContext, procedureName: string, values: readonly (string | number | null | Buffer)[], timeoutSeconds: number) {
-    return this.database.executeReadOnlyProcedureWithMetadata(company, procedureName, values, timeoutSeconds);
+    if (company.code?.toLowerCase() === 'k1ndt3ch') {
+      return this.catalogDatabase.executeReadOnlyProcedureWithMetadata(
+        company,
+        procedureName,
+        values,
+        timeoutSeconds,
+      );
+    }
+
+    return this.companyDatabase.executeReadOnlyProcedureWithMetadata(
+      company,
+      procedureName,
+      values,
+      timeoutSeconds,
+    );
   }
 }
 

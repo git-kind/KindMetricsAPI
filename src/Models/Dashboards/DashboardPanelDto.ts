@@ -353,6 +353,7 @@ export const dashboardPanelListQuerySchema = z.object({
 
 export const executeDashboardPanelSchema = z
   .object({
+    panelName: z.string().trim().min(1).max(160).optional(),
     filters: z.record(
       z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/),
       z.union([z.string().max(2_000), z.number().finite(), z.boolean(), z.null()]),
@@ -378,7 +379,12 @@ export const dashboardPanelExecutionApiResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   data: dashboardPanelExecutionResponseSchema.nullable(),
-  errors: z.array(z.object({ code: z.string(), message: z.string(), field: z.string().optional() })),
+  errors: z.array(z.object({
+    code: z.string(),
+    message: z.string(),
+    field: z.string().optional(),
+    context: z.record(z.string(), z.unknown()).optional(),
+  })),
   meta: z.object({ requestId: z.string() }),
 });
 
@@ -558,6 +564,7 @@ const apiErrorSchema = z.object({
   code: z.string(),
   message: z.string(),
   field: z.string().optional(),
+  context: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const dashboardPanelApiResponseSchema = z.object({

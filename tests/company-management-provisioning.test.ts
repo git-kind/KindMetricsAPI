@@ -162,11 +162,7 @@ describe('Company provisioning', () => {
         'kindmetrics_app',
       ],
     );
-    expect(initializeMock).toHaveBeenCalledWith({
-      database: 'empresa_01',
-      username: 'empresa_user',
-      password: 'plaintext-password',
-    });
+    expect(initializeMock).not.toHaveBeenCalled();
     expect(callRowsMock).toHaveBeenLastCalledWith(
       'sp_company_management_update',
       [8, JSON.stringify({ estado: 'activo' }), null],
@@ -174,36 +170,7 @@ describe('Company provisioning', () => {
     expect(encryptMock).toHaveBeenCalledWith('plaintext-password');
   });
 
-  it('leaves the company inactive when tenant migrations fail', async () => {
-    process.env.MYSQL_USER = 'kindmetrics_app';
-    callRowsMock.mockResolvedValueOnce([{
-      id: 8,
-      guid: 'c7d4a114-40f8-4a19-90f2-8ad590baf3a9',
-      name: 'Empresa',
-      code: 'EMP',
-      razon_social: 'Empresa S.A.',
-      rfc: null,
-      direccion: null,
-      telefono: null,
-      created_at: new Date('2026-10-22T00:00:00.000Z'),
-      estado: 'inactivo',
-      status: 'INACTIVE',
-    }]);
-    initializeMock.mockRejectedValueOnce({ code: 'ER_ACCESS_DENIED_ERROR' });
-
-    await expect(provisionCompanyDatabase(8, {
-      database_name: 'empresa_01',
-      database_user: 'empresa_user',
-      database_password: 'plaintext-password',
-    })).rejects.toMatchObject({
-      statusCode: 503,
-      code: 'COMPANY_DATABASE_INITIALIZATION_FAILED',
-    });
-
-    expect(callRowsMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('deactivates newly provisioned companies returned active by the old procedure', async () => {
+  it('does not install tenant migrations when provisioning the database', async () => {
     process.env.MYSQL_USER = 'kindmetrics_app';
     const activeCompany = {
       id: 8,
@@ -220,18 +187,14 @@ describe('Company provisioning', () => {
     };
     callRowsMock
       .mockResolvedValueOnce([activeCompany])
-      .mockResolvedValueOnce([{ ...activeCompany, estado: 'inactivo', status: 'INACTIVE' }]);
+      .mockResolvedValueOnce([activeCompany]);
 
     await expect(provisionCompanyDatabase(8, {
       database_name: 'empresa_01',
       database_user: 'empresa_user',
       database_password: 'plaintext-password',
-    })).rejects.toMatchObject({
-      statusCode: 503,
-      code: 'COMPANY_PROCEDURE_MIGRATION_REQUIRED',
-    });
+    })).resolves.toMatchObject({ id: 8, estado: 'activo' });
 
-    expect(callRowsMock).toHaveBeenLastCalledWith('sp_company_management_deactivate', [8]);
     expect(initializeMock).not.toHaveBeenCalled();
   });
 

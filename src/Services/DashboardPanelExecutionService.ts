@@ -30,6 +30,40 @@ const panelMappingsSchema = z.object({
 });
 type FilterValue = string | number | boolean | null;
 type ExecutionFilters = Record<string, FilterValue>;
+type DiagnosticParameter = { name: string; value: ProcedureParameter };
+
+function databaseNameFromError(error: unknown): string | undefined {
+  let current = error;
+  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth += 1) {
+    const candidate = current as { databaseName?: unknown; cause?: unknown };
+    if (typeof candidate.databaseName === 'string') return candidate.databaseName;
+    current = candidate.cause;
+  }
+  return undefined;
+}
+
+function databaseErrorFromError(error: unknown): Record<string, string | number> | undefined {
+  let current = error;
+  const details: Record<string, string | number> = {};
+  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth += 1) {
+    const candidate = current as {
+      code?: unknown;
+      errno?: unknown;
+      sqlState?: unknown;
+      sqlMessage?: unknown;
+      cause?: unknown;
+    };
+    if (typeof candidate.code === 'string') details.code = candidate.code;
+    if (typeof candidate.errno === 'number') details.number = candidate.errno;
+    if (typeof candidate.sqlState === 'string') details.sqlState = candidate.sqlState;
+    if (candidate.code === 'ER_NO_SUCH_TABLE' && typeof candidate.sqlMessage === 'string') {
+      const missingTable = candidate.sqlMessage.match(/Table '([^']+)' doesn't exist/i)?.[1];
+      if (missingTable) details.missingTable = missingTable;
+    }
+    current = candidate.cause;
+  }
+  return Object.keys(details).length ? details : undefined;
+}
 
 function valueMatchesType(value: unknown, type: (typeof parameterTypes)[number]): value is ProcedureParameter {
   if (value === null) return true;
@@ -85,7 +119,15 @@ export class DashboardPanelExecutionService {
 
   constructor(private readonly repository = new DashboardPanelExecutionRepository()) {}
 
-  async execute(company: CompanyContext, dashboardGuid: string, tabGuid: string, panelGuid: string, filters: ExecutionFilters, userGuid: string) {
+  async execute(
+    company: CompanyContext,
+    dashboardGuid: string,
+    tabGuid: string,
+    panelGuid: string,
+    filters: ExecutionFilters,
+    userGuid: string,
+    panelName = panelGuid,
+  ) {
     const config = await this.repository.getConfig(company, dashboardGuid, tabGuid, panelGuid);
     if (!config || config.status !== 'ACTIVE' || !config.isVisible || config.dashboardStatus !== 'ACTIVE' || config.tabStatus !== 'ACTIVE') {
       throw new AppError('El Panel no existe o no está disponible.', { statusCode: 404, code: 'DASHBOARD_PANEL_NOT_FOUND' });
@@ -136,6 +178,7 @@ export class DashboardPanelExecutionService {
     }
 
     const parameters: ProcedureParameter[] = [];
+    const diagnosticParameters: DiagnosticParameter[] = [];
     for (const parameter of contract.data.parameters) {
       const mappingEntry = mappedByName.get(parameter.name)!;
       let value: unknown;
@@ -158,7 +201,9 @@ export class DashboardPanelExecutionService {
           field: parameter.name,
         });
       }
-      parameters.push((value ?? null) as ProcedureParameter);
+      const parameterValue = (value ?? null) as ProcedureParameter;
+      parameters.push(parameterValue);
+      diagnosticParameters.push({ name: parameter.name, value: parameterValue });
     }
 
     const running = this.activeExecutions.get(company.id) ?? 0;
@@ -172,7 +217,32 @@ export class DashboardPanelExecutionService {
     const startedAt = Date.now();
     try {
       const timeoutSeconds = Math.min(config.panelTimeoutSeconds, config.procedureTimeoutSeconds ?? config.panelTimeoutSeconds);
-      const execution = await this.repository.execute(company, config.procedureName, parameters, timeoutSeconds);
+      let execution;
+      try {
+        execution = await this.repository.execute(company, config.procedureName, parameters, timeoutSeconds);
+      } catch (error) {
+        const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
+        const timedOut = code.includes('TIMEOUT') || code.includes('ETIMEDOUT');
+        const databaseError = databaseErrorFromError(error);
+        throw new AppError(
+          timedOut
+            ? 'La ejecución del Panel excedió el tiempo permitido.'
+            : 'No fue posible ejecutar el procedimiento autorizado del Panel.',
+          {
+            statusCode: timedOut ? 504 : 502,
+            code: timedOut ? 'DASHBOARD_PANEL_TIMEOUT' : 'DASHBOARD_PANEL_EXECUTION_FAILED',
+            cause: error,
+            context: {
+              panelName,
+              panelGuid,
+              procedureName: config.procedureName,
+              database: databaseNameFromError(error) ?? null,
+              parameters: diagnosticParameters,
+              ...(databaseError ? { databaseError } : {}),
+            },
+          },
+        );
+      }
       const sets = execution.resultSets ?? [];
       if (sets.length > 1) {
         throw new AppError('El procedimiento devolvió más de un conjunto de resultados.', {
@@ -205,15 +275,7 @@ export class DashboardPanelExecutionService {
       };
     } catch (error) {
       if (error instanceof AppError) throw error;
-      const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : '';
-      if (code.includes('TIMEOUT') || code.includes('ETIMEDOUT')) {
-        throw new AppError('La ejecución del Panel excedió el tiempo permitido.', { statusCode: 504, code: 'DASHBOARD_PANEL_TIMEOUT' });
-      }
-      throw new AppError('No fue posible ejecutar el procedimiento autorizado del Panel.', {
-        statusCode: 502,
-        code: 'DASHBOARD_PANEL_EXECUTION_FAILED',
-        cause: error,
-      });
+      throw error;
     } finally {
       const remaining = (this.activeExecutions.get(company.id) ?? 1) - 1;
       if (remaining === 0) this.activeExecutions.delete(company.id);

@@ -20,6 +20,37 @@ function issues(error: { issues: { message: string; path: PropertyKey[] }[] }) {
   return error.issues.map((issue) => createError('VALIDATION_ERROR', issue.message, issue.path.map(String).join('.')));
 }
 
+function databaseErrorDetails(error: unknown) {
+  let current = error;
+  const details: {
+    databaseErrorCode?: string;
+    databaseErrorNumber?: number;
+    databaseSqlState?: string;
+    missingTable?: string;
+  } = {};
+  for (let depth = 0; depth < 3 && current && typeof current === 'object'; depth += 1) {
+    const candidate = current as {
+      cause?: unknown;
+      code?: unknown;
+      errno?: unknown;
+      sqlState?: unknown;
+      sqlMessage?: unknown;
+    };
+    const hasDatabaseDetails = candidate.errno !== undefined || candidate.sqlState !== undefined;
+    if (typeof candidate.code === 'string' && (!details.databaseErrorCode || hasDatabaseDetails)) {
+      details.databaseErrorCode = candidate.code;
+    }
+    if (typeof candidate.errno === 'number') details.databaseErrorNumber = candidate.errno;
+    if (typeof candidate.sqlState === 'string') details.databaseSqlState = candidate.sqlState;
+    if (candidate.code === 'ER_NO_SUCH_TABLE' && typeof candidate.sqlMessage === 'string') {
+      const missingTable = candidate.sqlMessage.match(/Table '([^']+)' doesn't exist/i)?.[1];
+      if (missingTable) details.missingTable = missingTable;
+    }
+    current = candidate.cause;
+  }
+  return details;
+}
+
 export class DashboardPanelsController {
   async handle(operation: PanelOperation, request: FastifyRequest, reply: FastifyReply) {
     const params = dashboardPanelParamsSchema.safeParse(request.params);
@@ -48,12 +79,36 @@ export class DashboardPanelsController {
       if (!input.success) return reply.code(400).send(buildErrorResponse('Existen errores de validación.', issues(input.error), request.id));
       let data;
       try {
-        data = await executionService.execute(company, dashboardGuid, tabGuid, panelGuid!, input.data.filters, request.principal!.sub);
+        data = await executionService.execute(
+          company,
+          dashboardGuid,
+          tabGuid,
+          panelGuid!,
+          input.data.filters,
+          request.principal!.sub,
+          input.data.panelName ?? panelGuid!,
+        );
       } catch (error) {
         const errorCode = error && typeof error === 'object' && 'code' in error ? String(error.code) : 'UNEXPECTED_ERROR';
-        request.log.error({ companyGuid: company.guid, dashboardGuid, tabGuid, panelGuid, errorCode }, 'Dashboard Panel execution failed');
+        request.log.error({
+          companyGuid: company.guid,
+          dashboardGuid,
+          tabGuid,
+          panelGuid,
+          errorCode,
+          ...databaseErrorDetails(error),
+        }, 'Dashboard Panel execution failed');
         throw error;
       }
+      request.log.info({
+        companyGuid: company.guid,
+        dashboardGuid,
+        tabGuid,
+        panelGuid,
+        panelType: data.panelType,
+        rowCount: data.rowCount,
+        columnNames: data.columns.map((column) => column.name),
+      }, 'Dashboard Panel execution succeeded');
       return reply.code(200).send(buildSuccessResponse(data, request.id, 'Panel ejecutado correctamente.'));
     }
     if (operation === 'create') {
