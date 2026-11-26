@@ -37,6 +37,10 @@ function toProcedure(row: ProcedureRow): DashboardProcedureResponseDto {
 export class DashboardProcedureRepository {
   constructor(private readonly database = new KindTechDatabaseRepository()) {}
 
+  getCatalogConnectionDetails() {
+    return this.database.getConnectionDetails();
+  }
+
   async syncDiscoveredProcedure(
     company: CompanyContext,
     procedureName: string,

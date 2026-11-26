@@ -104,10 +104,13 @@ describe('Dashboard procedures service', () => {
     const metadataRepository = {
       discoverProcedures: vi.fn().mockResolvedValue([
         {
-          procedureName: 'sp_dash_no_args',
+          procedureName: 'sp_dash_with_args',
           securityType: 'INVOKER',
           executable: true,
-          parameters: [],
+          parameters: [
+            { name: 'p_date_from', type: 'DATETIME', mode: 'IN', ordinalPosition: 1 },
+            { name: 'p_region', type: 'STRING', mode: 'IN', ordinalPosition: 2 },
+          ],
         },
       ]),
     } as unknown as DashboardMetadataRepository;
@@ -117,6 +120,10 @@ describe('Dashboard procedures service', () => {
         errno: 1364,
         sqlMessage: "Field 'id' doesn't have a default value",
       }),
+      getCatalogConnectionDetails: vi.fn().mockReturnValue({
+        database: 'kindmetrics',
+        databaseUser: 'kindmetrics_api',
+      }),
       list: vi.fn(),
     } as unknown as DashboardProcedureRepository;
     const service = new DashboardProceduresService(repository, metadataRepository);
@@ -125,6 +132,16 @@ describe('Dashboard procedures service', () => {
       statusCode: 503,
       code: 'DASHBOARD_PROCEDURE_CATALOG_MIGRATION_REQUIRED',
       message: expect.stringContaining('0012-dashboard-procedure-id-auto-increment.sql'),
+      context: {
+        database: 'kindmetrics',
+        databaseUser: 'kindmetrics_api',
+        procedureName: 'sp_dash_with_args',
+        parameters: [
+          { name: 'p_date_from', type: 'DATETIME', mode: 'IN' },
+          { name: 'p_region', type: 'STRING', mode: 'IN' },
+        ],
+        companyCode: 'DEV',
+      },
     });
   });
 });

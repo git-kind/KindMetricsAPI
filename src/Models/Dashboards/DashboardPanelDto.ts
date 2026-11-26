@@ -39,7 +39,10 @@ const procedureParameterSchema = z
     name: z.string().regex(/^p_[a-z][a-z0-9_]{0,62}$/),
     type: z.enum(['STRING', 'NUMBER', 'INTEGER', 'BOOLEAN', 'DATE', 'DATETIME']),
     source: z.enum(['DASHBOARD_FILTER', 'STATIC', 'SYSTEM']),
-    filter: z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/).optional(),
+    filter: z
+      .string()
+      .regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/)
+      .optional(),
     value: z.union([z.string().max(2_000), z.number().finite(), z.boolean(), z.null()]).optional(),
     systemKey: z.enum(['companyGuid', 'companyId', 'userGuid']).optional(),
     required: z.boolean(),
@@ -77,244 +80,351 @@ const fieldName = z.string().trim().min(1).max(128);
 const color = z.string().trim().min(1).max(40);
 const hexColor = z.string().regex(/^#(?:[\da-fA-F]{3}|[\da-fA-F]{6})$/);
 const thresholdSchema = z.object({ value: z.number().finite(), color }).strict();
-const panelGridConditionSchema = z.object({
-  expression: z.string().trim().min(1).max(512),
-  operator: z.enum(['GT', 'GTE', 'LT', 'LTE', 'EQ', 'NE']),
-  value: z.number().finite(),
-  backgroundColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
-  textColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
-}).strict().refine((condition) => condition.backgroundColor || condition.textColor);
+const panelGridConditionSchema = z
+  .object({
+    expression: z.string().trim().min(1).max(512),
+    operator: z.enum(['GT', 'GTE', 'LT', 'LTE', 'EQ', 'NE']),
+    value: z.number().finite(),
+    backgroundColor: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/)
+      .optional(),
+    textColor: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/)
+      .optional(),
+  })
+  .strict()
+  .refine((condition) => condition.backgroundColor || condition.textColor);
 const panelGridCellSchema = z.discriminatedUnion('source', [
-  z.object({
-    id: z.string().min(1).max(64),
-    title: z.string().max(100),
-    source: z.literal('FIELD'),
-    field: fieldName,
-    format: z.enum(['text', 'number', 'currency', 'percent', 'duration', 'date', 'datetime']),
-    decimals: z.number().int().min(0).max(6).optional(),
-    unit: z.string().max(32).optional(),
-    backgroundColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
-    textColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
-    conditions: z.array(panelGridConditionSchema).max(8).optional(),
-  }).strict(),
-  z.object({
-    id: z.string().min(1).max(64),
-    title: z.string().max(100),
-    source: z.literal('FORMULA'),
-    formula: z.string().trim().min(1).max(512),
-    format: z.enum(['text', 'number', 'currency', 'percent', 'duration', 'date', 'datetime']),
-    decimals: z.number().int().min(0).max(6).optional(),
-    unit: z.string().max(32).optional(),
-    backgroundColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
-    textColor: z.string().regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/).optional(),
-    conditions: z.array(panelGridConditionSchema).max(8).optional(),
-  }).strict(),
+  z
+    .object({
+      id: z.string().min(1).max(64),
+      title: z.string().max(100),
+      source: z.literal('FIELD'),
+      field: fieldName,
+      format: z.enum(['text', 'number', 'currency', 'percent', 'duration', 'date', 'datetime']),
+      decimals: z.number().int().min(0).max(6).optional(),
+      unit: z.string().max(32).optional(),
+      backgroundColor: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/)
+        .optional(),
+      textColor: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/)
+        .optional(),
+      conditions: z.array(panelGridConditionSchema).max(8).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string().min(1).max(64),
+      title: z.string().max(100),
+      source: z.literal('FORMULA'),
+      formula: z.string().trim().min(1).max(512),
+      format: z.enum(['text', 'number', 'currency', 'percent', 'duration', 'date', 'datetime']),
+      decimals: z.number().int().min(0).max(6).optional(),
+      unit: z.string().max(32).optional(),
+      backgroundColor: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/)
+        .optional(),
+      textColor: z
+        .string()
+        .regex(/^#[0-9a-fA-F]{3}(?:[0-9a-fA-F]{3})?(?:[0-9a-fA-F]{2})?$/)
+        .optional(),
+      conditions: z.array(panelGridConditionSchema).max(8).optional(),
+    })
+    .strict(),
 ]);
 const gaugeGridGaugeSchema = z.discriminatedUnion('source', [
-  z.object({
-    id: z.string().min(1).max(64),
-    title: z.string().max(100),
-    source: z.literal('FIELD'),
-    field: fieldName,
-    format: z.enum(['number', 'percent', 'duration']).default('number'),
-    decimals: z.number().int().min(0).max(6).optional(),
-    unit: z.string().max(32).optional(),
-    minimum: z.number().finite().optional(),
-    maximum: z.number().finite().optional(),
-    defaultColor: color.optional(),
-    thresholds: z.array(thresholdSchema).max(32).optional(),
-  }).strict().refine(
-    (gauge) => gauge.minimum === undefined || gauge.maximum === undefined || gauge.minimum < gauge.maximum,
-    { path: ['maximum'], message: 'El mínimo del medidor debe ser menor que su máximo.' },
-  ),
-  z.object({
-    id: z.string().min(1).max(64),
-    title: z.string().max(100),
-    source: z.literal('FORMULA'),
-    formula: z.string().trim().min(1).max(512),
-    format: z.enum(['number', 'percent', 'duration']).default('number'),
-    decimals: z.number().int().min(0).max(6).optional(),
-    unit: z.string().max(32).optional(),
-    minimum: z.number().finite().optional(),
-    maximum: z.number().finite().optional(),
-    defaultColor: color.optional(),
-    thresholds: z.array(thresholdSchema).max(32).optional(),
-  }).strict().refine(
-    (gauge) => gauge.minimum === undefined || gauge.maximum === undefined || gauge.minimum < gauge.maximum,
-    { path: ['maximum'], message: 'El mínimo del medidor debe ser menor que su máximo.' },
-  ),
+  z
+    .object({
+      id: z.string().min(1).max(64),
+      title: z.string().max(100),
+      source: z.literal('FIELD'),
+      field: fieldName,
+      format: z.enum(['number', 'percent', 'duration']).default('number'),
+      decimals: z.number().int().min(0).max(6).optional(),
+      unit: z.string().max(32).optional(),
+      minimum: z.number().finite().optional(),
+      maximum: z.number().finite().optional(),
+      defaultColor: color.optional(),
+      thresholds: z.array(thresholdSchema).max(32).optional(),
+    })
+    .strict()
+    .refine((gauge) => gauge.minimum === undefined || gauge.maximum === undefined || gauge.minimum < gauge.maximum, {
+      path: ['maximum'],
+      message: 'El mínimo del medidor debe ser menor que su máximo.',
+    }),
+  z
+    .object({
+      id: z.string().min(1).max(64),
+      title: z.string().max(100),
+      source: z.literal('FORMULA'),
+      formula: z.string().trim().min(1).max(512),
+      format: z.enum(['number', 'percent', 'duration']).default('number'),
+      decimals: z.number().int().min(0).max(6).optional(),
+      unit: z.string().max(32).optional(),
+      minimum: z.number().finite().optional(),
+      maximum: z.number().finite().optional(),
+      defaultColor: color.optional(),
+      thresholds: z.array(thresholdSchema).max(32).optional(),
+    })
+    .strict()
+    .refine((gauge) => gauge.minimum === undefined || gauge.maximum === undefined || gauge.minimum < gauge.maximum, {
+      path: ['maximum'],
+      message: 'El mínimo del medidor debe ser menor que su máximo.',
+    }),
 ]);
 
 const visualizationPropertiesSchemas = {
-  NUMBER: z.object({
-    valueField: fieldName,
-    title: z.string().max(200).optional(),
-    unit: z.string().max(40).optional(),
-    decimals: z.number().int().min(0).max(10).optional(),
-    prefix: z.string().max(32).optional(),
-    suffix: z.string().max(32).optional(),
-    format: z.enum(['number', 'currency', 'percent', 'duration']).optional(),
-    thresholds: z.array(thresholdSchema).max(32).optional(),
-    colors: z.array(color).max(32).optional(),
-  }).strict(),
-  STAT: z.object({ valueField: fieldName }).passthrough(),
-  TABLE: z.object({
-    columns: z.array(z.object({
-      field: fieldName,
-      header: z.string().max(200).optional(),
-      format: z.enum(['text', 'number', 'date', 'datetime', 'percent']).optional(),
-      align: z.enum(['left', 'center', 'right']).optional(),
-      visible: z.boolean().optional(),
-    }).strict()).min(1).max(256),
-    pagination: z.object({ enabled: z.boolean(), pageSize: z.number().int().min(1).max(500) }).strict().optional(),
-    sorting: z.object({ enabled: z.boolean(), fields: z.array(fieldName).max(256) }).strict().optional(),
-    showHeader: z.boolean().optional(),
-    frozenColumns: z.number().int().min(0).max(256).optional(),
-    cellHeight: z.enum(['small', 'medium', 'large']).optional(),
-    maxHeight: z.number().int().min(120).max(2000).optional(),
-    minColumnWidth: z.number().int().min(60).max(2000).optional(),
-    wrapText: z.boolean().optional(),
-    columnAlignment: z.enum(['auto', 'left', 'center', 'right']).optional(),
-  }).strict(),
-  LINE: z.object({
-    xField: fieldName,
-    yFields: z.array(fieldName).min(1).max(32),
-    series: z.array(z.object({ field: fieldName, name: z.string().max(100).optional(), color: color.optional(), unit: z.string().max(40).optional() }).strict()).max(32).optional(),
-    legend: z.boolean().optional(),
-    xAxisFormat: z.string().max(40).optional(),
-    yAxisFormat: z.string().max(40).optional(),
-    labels: z.boolean().optional(),
-    colors: z.array(color).max(32).optional(),
-  }).strict(),
-  BAR: z.object({
-    xField: fieldName,
-    yFields: z.array(fieldName).min(1).max(32),
-    series: z.array(z.object({ field: fieldName, name: z.string().max(100).optional(), color: color.optional(), unit: z.string().max(40).optional() }).strict()).max(32).optional(),
-    legend: z.boolean().optional(),
-    xAxisFormat: z.string().max(40).optional(),
-    yAxisFormat: z.string().max(40).optional(),
-    labels: z.boolean().optional(),
-    colors: z.array(color).max(32).optional(),
-    stacked: z.boolean().optional(),
-    barStyle: z.enum(['green', 'purple', 'orange', 'custom']).optional(),
-    barCustomColor: hexColor.optional(),
-    barWidthPercent: z.number().int().min(10).max(100).optional(),
-    barCategoryGapPercent: z.number().int().min(0).max(90).optional(),
-    xAxisLabelRotate: z.number().int().min(0).max(90).optional(),
-  }).strict().refine(
-    (properties) => properties.barStyle !== 'custom' || properties.barCustomColor !== undefined,
-    { path: ['barCustomColor'], message: 'El estilo personalizado requiere un color.' },
-  ),
-  TIME_SERIES: z.object({
-    xField: fieldName,
-    yFields: z.array(fieldName).min(1).max(32),
-    series: z.array(z.object({
-      field: fieldName,
-      name: z.string().max(100).optional(),
-      color: color.optional(),
+  NUMBER: z
+    .object({
+      valueField: fieldName,
+      title: z.string().max(200).optional(),
       unit: z.string().max(40).optional(),
-    }).strict()).max(32).optional(),
-    legend: z.boolean().optional(),
-    xAxisFormat: z.enum(['date', 'time', 'date_time', 'datetime']).optional(),
-    chartMode: z.enum(['lines', 'bars', 'points', 'step_fills']).optional(),
-    interpolation: z.enum(['linear', 'smooth', 'step-start', 'step-end']).optional(),
-    lineWidth: z.number().int().min(0).max(10).optional(),
-    fillOpacity: z.number().int().min(0).max(100).optional(),
-    gradientMode: z.enum(['none', 'opacity', 'horizontal', 'scheme']).optional(),
-    lineStyle: z.enum(['solid', 'dashed', 'dotted']).optional(),
-    barWidthPercent: z.number().int().min(10).max(100).optional(),
-    barCategoryGapPercent: z.number().int().min(0).max(90).optional(),
-    xAxisLabelRotate: z.number().int().min(0).max(90).optional(),
-    pointSize: z.number().int().min(2).max(20).optional(),
-    stacked: z.boolean().optional(),
-  }).strict(),
-  PIE: z.object({
-    categoryField: fieldName,
-    valueField: fieldName,
-    legend: z.boolean().optional(),
-    labels: z.boolean().optional(),
-    showPercentages: z.boolean().optional(),
-    colors: z.array(color).max(64).optional(),
-  }).strict(),
-
-
-
-
-
-  GAUGE: z.object({
-    valueField: fieldName,
-    minimum: z.number().finite().optional(),
-    maximum: z.number().finite().optional(),
-    unit: z.string().max(40).optional(),
-    thresholds: z.array(thresholdSchema).max(32).optional(),
-  }).strict().refine((properties) => properties.minimum === undefined || properties.maximum === undefined || properties.minimum < properties.maximum),
-  HEATMAP: z.object({
-    xField: fieldName,
-    yField: fieldName,
-    valueField: fieldName,
-    colorScale: z.array(color).min(2).max(16).optional(),
-  }).strict(),
-  MAP: z.object({
-    latitudeField: fieldName,
-    longitudeField: fieldName,
-    labelField: fieldName.optional(),
-    valueField: fieldName.optional(),
-    marker: z.object({ color: color.optional(), size: z.number().int().min(1).max(64).optional(), cluster: z.boolean().optional() }).strict().optional(),
-  }).strict(),
-  GAUGE_GRID: z.object({
-    columns: z.number().int().min(1).max(12),
-    rows: z.number().int().min(1).max(8),
-    design: z.enum(['arc', 'ring']).optional(),
-    orientation: z.enum(['auto', 'horizontal', 'vertical']).optional(),
-    barWidthFactor: z.number().finite().min(0.1).max(1).optional(),
-    segments: z.number().int().min(1).max(100).optional(),
-    segmentSpacing: z.number().finite().min(0).max(1).optional(),
-    textMode: z.enum(['auto', 'value', 'name', 'value_and_name', 'none']).optional(),
-    minimum: z.number().finite().optional(),
-    maximum: z.number().finite().optional(),
-    neutralValue: z.number().finite().optional(),
-    unit: z.string().max(40).optional(),
-    defaultColor: color.optional(),
-    showSparkline: z.boolean().optional(),
-    showThresholds: z.boolean().optional(),
-    showLabels: z.boolean().optional(),
-    gradient: z.boolean().optional(),
-    barGlow: z.boolean().optional(),
-    centerGlow: z.boolean().optional(),
-    gauges: z.array(gaugeGridGaugeSchema).min(1).max(48),
-  }).strict().refine((properties) =>
-    properties.gauges.length === properties.columns * properties.rows &&
-    new Set(properties.gauges.map((gauge) => gauge.id)).size === properties.gauges.length &&
-    (properties.minimum === undefined || properties.maximum === undefined || properties.minimum < properties.maximum) &&
-    (properties.neutralValue === undefined || properties.minimum === undefined || properties.neutralValue >= properties.minimum) &&
-    (properties.neutralValue === undefined || properties.maximum === undefined || properties.neutralValue < properties.maximum) &&
-    properties.gauges.every((gauge) => {
-      const minimum = gauge.minimum ?? properties.neutralValue ?? properties.minimum;
-      const maximum = gauge.maximum ?? properties.maximum;
-      return minimum === undefined || maximum === undefined || minimum < maximum;
+      decimals: z.number().int().min(0).max(10).optional(),
+      prefix: z.string().max(32).optional(),
+      suffix: z.string().max(32).optional(),
+      format: z.enum(['number', 'currency', 'percent', 'duration']).optional(),
+      thresholds: z.array(thresholdSchema).max(32).optional(),
+      colors: z.array(color).max(32).optional(),
+    })
+    .strict(),
+  STAT: z.object({ valueField: fieldName }).passthrough(),
+  TABLE: z
+    .object({
+      columns: z
+        .array(
+          z
+            .object({
+              field: fieldName,
+              header: z.string().max(200).optional(),
+              format: z.enum(['text', 'number', 'date', 'datetime', 'percent']).optional(),
+              align: z.enum(['left', 'center', 'right']).optional(),
+              visible: z.boolean().optional(),
+            })
+            .strict(),
+        )
+        .min(1)
+        .max(256),
+      pagination: z
+        .object({ enabled: z.boolean(), pageSize: z.number().int().min(1).max(500) })
+        .strict()
+        .optional(),
+      sorting: z
+        .object({ enabled: z.boolean(), fields: z.array(fieldName).max(256) })
+        .strict()
+        .optional(),
+      showHeader: z.boolean().optional(),
+      frozenColumns: z.number().int().min(0).max(256).optional(),
+      cellHeight: z.enum(['small', 'medium', 'large']).optional(),
+      maxHeight: z.number().int().min(120).max(2000).optional(),
+      minColumnWidth: z.number().int().min(60).max(2000).optional(),
+      wrapText: z.boolean().optional(),
+      columnAlignment: z.enum(['auto', 'left', 'center', 'right']).optional(),
+    })
+    .strict(),
+  LINE: z
+    .object({
+      xField: fieldName,
+      yFields: z.array(fieldName).min(1).max(32),
+      series: z
+        .array(z.object({ field: fieldName, name: z.string().max(100).optional(), color: color.optional(), unit: z.string().max(40).optional() }).strict())
+        .max(32)
+        .optional(),
+      legend: z.boolean().optional(),
+      xAxisFormat: z.string().max(40).optional(),
+      yAxisFormat: z.string().max(40).optional(),
+      labels: z.boolean().optional(),
+      colors: z.array(color).max(32).optional(),
+    })
+    .strict(),
+  BAR: z
+    .object({
+      xField: fieldName,
+      yFields: z.array(fieldName).min(1).max(32),
+      series: z
+        .array(z.object({ field: fieldName, name: z.string().max(100).optional(), color: color.optional(), unit: z.string().max(40).optional() }).strict())
+        .max(32)
+        .optional(),
+      legend: z.boolean().optional(),
+      xAxisFormat: z.string().max(40).optional(),
+      yAxisFormat: z.string().max(40).optional(),
+      labels: z.boolean().optional(),
+      colors: z.array(color).max(32).optional(),
+      stacked: z.boolean().optional(),
+      barStyle: z.enum(['green', 'purple', 'orange', 'custom']).optional(),
+      barCustomColor: hexColor.optional(),
+      barWidthPercent: z.number().int().min(10).max(100).optional(),
+      barCategoryGapPercent: z.number().int().min(0).max(90).optional(),
+      xAxisLabelRotate: z.number().int().min(0).max(90).optional(),
+      barOrientation: z.enum(['vertical', 'horizontal']).optional(),
+    })
+    .strict()
+    .refine((properties) => properties.barStyle !== 'custom' || properties.barCustomColor !== undefined, {
+      path: ['barCustomColor'],
+      message: 'El estilo personalizado requiere un color.',
     }),
-  ),
-  TEXT: z.object({ content: z.string().max(20_000).refine((value) => !/[<>]/.test(value)), format: z.literal('plain').default('plain') }).strict(),
-  PANEL: z.object({
-    columns: z.number().int().min(1).max(12),
-    rows: z.number().int().min(1).max(8),
-    cells: z.array(panelGridCellSchema).min(1).max(48),
-  }).strict().refine((properties) =>
-    properties.cells.length === properties.columns * properties.rows &&
-    new Set(properties.cells.map((cell) => cell.id)).size === properties.cells.length,
-  ),
+  TIME_SERIES: z
+    .object({
+      xField: fieldName,
+      yFields: z.array(fieldName).min(1).max(32),
+      series: z
+        .array(
+          z
+            .object({
+              field: fieldName,
+              name: z.string().max(100).optional(),
+              color: color.optional(),
+              unit: z.string().max(40).optional(),
+            })
+            .strict(),
+        )
+        .max(32)
+        .optional(),
+      legend: z.boolean().optional(),
+      xAxisFormat: z.enum(['date', 'time', 'date_time', 'datetime']).optional(),
+      chartMode: z.enum(['lines', 'bars', 'points', 'step_fills']).optional(),
+      interpolation: z.enum(['linear', 'smooth', 'step-start', 'step-end']).optional(),
+      lineWidth: z.number().int().min(0).max(10).optional(),
+      fillOpacity: z.number().int().min(0).max(100).optional(),
+      gradientMode: z.enum(['none', 'opacity', 'horizontal', 'scheme']).optional(),
+      lineStyle: z.enum(['solid', 'dashed', 'dotted']).optional(),
+      barWidthPercent: z.number().int().min(10).max(100).optional(),
+      barCategoryGapPercent: z.number().int().min(0).max(90).optional(),
+      xAxisLabelRotate: z.number().int().min(0).max(90).optional(),
+      pointSize: z.number().int().min(2).max(20).optional(),
+      stacked: z.boolean().optional(),
+    })
+    .strict(),
+  PIE: z
+    .object({
+      categoryField: fieldName.optional(),
+      valueField: fieldName,
+      fields: z.array(fieldName).min(1).max(32).optional(),
+      showMode: z.enum(['calculate', 'all_values']).optional(),
+      limit: z.number().int().min(1).max(5_000).optional(),
+      pieType: z.enum(['pie', 'donut']).optional(),
+      sliceSorting: z.enum(['none', 'ascending', 'descending']).optional(),
+      pieLabels: z
+        .array(z.enum(['name', 'value', 'percent']))
+        .max(3)
+        .optional(),
+      tooltipMode: z.enum(['single', 'all', 'hidden']).optional(),
+      tooltipMaxWidth: z.number().int().min(100).max(1_000).optional(),
+      legend: z.boolean().optional(),
+      labels: z.boolean().optional(),
+      showPercentages: z.boolean().optional(),
+      colors: z.array(color).max(64).optional(),
+    })
+    .strict(),
+
+  GAUGE: z
+    .object({
+      valueField: fieldName.optional(),
+      valueFields: z.array(fieldName).min(1).max(48).optional(),
+      minimum: z.number().finite().optional(),
+      maximum: z.number().finite().optional(),
+      unit: z.string().max(40).optional(),
+      thresholds: z.array(thresholdSchema).max(32).optional(),
+    })
+    .strict()
+    .refine((properties) => properties.valueField !== undefined || (properties.valueFields?.length ?? 0) > 0, {
+      path: ['valueFields'],
+      message: 'Selecciona al menos un campo numérico.',
+    })
+    .refine((properties) => properties.valueFields === undefined || new Set(properties.valueFields).size === properties.valueFields.length, {
+      path: ['valueFields'],
+      message: 'Los campos seleccionados deben ser únicos.',
+    })
+    .refine((properties) => properties.minimum === undefined || properties.maximum === undefined || properties.minimum < properties.maximum),
+  HEATMAP: z
+    .object({
+      xField: fieldName,
+      yField: fieldName,
+      valueField: fieldName,
+      colorScale: z.array(color).min(2).max(16).optional(),
+    })
+    .strict(),
+  MAP: z
+    .object({
+      latitudeField: fieldName,
+      longitudeField: fieldName,
+      labelField: fieldName.optional(),
+      valueField: fieldName.optional(),
+      marker: z
+        .object({ color: color.optional(), size: z.number().int().min(1).max(64).optional(), cluster: z.boolean().optional() })
+        .strict()
+        .optional(),
+    })
+    .strict(),
+  GAUGE_GRID: z
+    .object({
+      columns: z.number().int().min(1).max(12),
+      rows: z.number().int().min(1).max(8),
+      design: z.enum(['arc', 'ring']).optional(),
+      orientation: z.enum(['auto', 'horizontal', 'vertical']).optional(),
+      barWidthFactor: z.number().finite().min(0.1).max(1).optional(),
+      segments: z.number().int().min(1).max(100).optional(),
+      segmentSpacing: z.number().finite().min(0).max(1).optional(),
+      textMode: z.enum(['auto', 'value', 'name', 'value_and_name', 'none']).optional(),
+      minimum: z.number().finite().optional(),
+      maximum: z.number().finite().optional(),
+      neutralValue: z.number().finite().optional(),
+      unit: z.string().max(40).optional(),
+      defaultColor: color.optional(),
+      showSparkline: z.boolean().optional(),
+      showThresholds: z.boolean().optional(),
+      showLabels: z.boolean().optional(),
+      gradient: z.boolean().optional(),
+      barGlow: z.boolean().optional(),
+      centerGlow: z.boolean().optional(),
+      gauges: z.array(gaugeGridGaugeSchema).min(1).max(48),
+    })
+    .strict()
+    .refine(
+      (properties) =>
+        properties.gauges.length === properties.columns * properties.rows &&
+        new Set(properties.gauges.map((gauge) => gauge.id)).size === properties.gauges.length &&
+        (properties.minimum === undefined || properties.maximum === undefined || properties.minimum < properties.maximum) &&
+        (properties.neutralValue === undefined || properties.minimum === undefined || properties.neutralValue >= properties.minimum) &&
+        (properties.neutralValue === undefined || properties.maximum === undefined || properties.neutralValue < properties.maximum) &&
+        properties.gauges.every((gauge) => {
+          const minimum = gauge.minimum ?? properties.neutralValue ?? properties.minimum;
+          const maximum = gauge.maximum ?? properties.maximum;
+          return minimum === undefined || maximum === undefined || minimum < maximum;
+        }),
+    ),
+  TEXT: z
+    .object({
+      content: z
+        .string()
+        .max(20_000)
+        .refine((value) => !/[<>]/.test(value)),
+      format: z.literal('plain').default('plain'),
+    })
+    .strict(),
+  PANEL: z
+    .object({
+      columns: z.number().int().min(1).max(12),
+      rows: z.number().int().min(1).max(8),
+      cells: z.array(panelGridCellSchema).min(1).max(48),
+    })
+    .strict()
+    .refine(
+      (properties) =>
+        properties.cells.length === properties.columns * properties.rows && new Set(properties.cells.map((cell) => cell.id)).size === properties.cells.length,
+    ),
 } as const;
 
 export function validPanelVisualizationConfig(panelTypeName: string, config: z.infer<typeof configSchema> | null | undefined): boolean {
   const parsedConfig = configSchema.safeParse(config);
   if (!parsedConfig.success) return false;
-  const knownSchema =
-    visualizationPropertiesSchemas[
-      panelTypeName as keyof typeof visualizationPropertiesSchemas
-    ];
-  return knownSchema
-    ? knownSchema.safeParse(parsedConfig.data.properties).success
-    : true;
+  const knownSchema = visualizationPropertiesSchemas[panelTypeName as keyof typeof visualizationPropertiesSchemas];
+  return knownSchema ? knownSchema.safeParse(parsedConfig.data.properties).success : true;
 }
 
 const procedureAssociationSchema = (panel: { panelType: string; dashboardProcedureGuid?: string | null; procedureParams?: unknown }) => {
@@ -354,10 +464,9 @@ export const dashboardPanelListQuerySchema = z.object({
 export const executeDashboardPanelSchema = z
   .object({
     panelName: z.string().trim().min(1).max(160).optional(),
-    filters: z.record(
-      z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/),
-      z.union([z.string().max(2_000), z.number().finite(), z.boolean(), z.null()]),
-    ).default({}),
+    filters: z
+      .record(z.string().regex(/^[A-Za-z][A-Za-z0-9_]{0,63}$/), z.union([z.string().max(2_000), z.number().finite(), z.boolean(), z.null()]))
+      .default({}),
   })
   .strict()
   .refine((request) => Object.keys(request.filters).length <= 64 && JSON.stringify(request.filters).length <= 32_768, {
@@ -368,6 +477,7 @@ export const executeDashboardPanelSchema = z
 export const dashboardPanelExecutionResponseSchema = z.object({
   panelGuid: guid,
   panelType,
+  procedureName: z.string().nullable(),
   columns: z.array(z.object({ name: z.string(), type: z.string() }).strict()),
   rows: z.array(z.record(z.string(), z.unknown())),
   rowCount: z.number().int().nonnegative(),
@@ -379,12 +489,14 @@ export const dashboardPanelExecutionApiResponseSchema = z.object({
   success: z.boolean(),
   message: z.string(),
   data: dashboardPanelExecutionResponseSchema.nullable(),
-  errors: z.array(z.object({
-    code: z.string(),
-    message: z.string(),
-    field: z.string().optional(),
-    context: z.record(z.string(), z.unknown()).optional(),
-  })),
+  errors: z.array(
+    z.object({
+      code: z.string(),
+      message: z.string(),
+      field: z.string().optional(),
+      context: z.record(z.string(), z.unknown()).optional(),
+    }),
+  ),
   meta: z.object({ requestId: z.string() }),
 });
 
@@ -467,7 +579,8 @@ export const updateDashboardPanelSchema = z
     },
   )
   .refine(
-    (panel) => panel.panelType === undefined || panel.visualizationConfig === undefined || validPanelVisualizationConfig(panel.panelType, panel.visualizationConfig),
+    (panel) =>
+      panel.panelType === undefined || panel.visualizationConfig === undefined || validPanelVisualizationConfig(panel.panelType, panel.visualizationConfig),
     {
       path: ['visualizationConfig'],
       message: 'La configuración de visualización no corresponde al tipo de Panel.',

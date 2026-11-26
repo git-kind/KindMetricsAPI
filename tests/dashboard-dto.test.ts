@@ -198,12 +198,14 @@ describe('Dashboard DTOs', () => {
         visualizationConfig: { schemaVersion: 1, properties: { content: '<script>alert(1)</script>' } },
       }).success,
     ).toBe(false);
-    expect(createDashboardPanelSchema.safeParse({
-      ...textPanel,
-      panelType: 'NUMBER',
-      dashboardProcedureGuid: null,
-      visualizationConfig: { schemaVersion: 1, properties: { valueField: 'total_calls' } },
-    }).success).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...textPanel,
+        panelType: 'NUMBER',
+        dashboardProcedureGuid: null,
+        visualizationConfig: { schemaVersion: 1, properties: { valueField: 'total_calls' } },
+      }).success,
+    ).toBe(true);
     expect(
       createDashboardPanelSchema.safeParse({
         ...textPanel,
@@ -234,11 +236,24 @@ describe('Dashboard DTOs', () => {
           barWidthPercent: 70,
           barCategoryGapPercent: 25,
           xAxisLabelRotate: 45,
+          barOrientation: 'horizontal',
         },
       },
     };
 
     expect(createDashboardPanelSchema.safeParse(barPanel).success).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...barPanel,
+        visualizationConfig: {
+          ...barPanel.visualizationConfig,
+          properties: {
+            ...barPanel.visualizationConfig.properties,
+            barOrientation: 'diagonal',
+          },
+        },
+      }).success,
+    ).toBe(false);
     expect(
       createDashboardPanelSchema.safeParse({
         ...barPanel,
@@ -310,6 +325,90 @@ describe('Dashboard DTOs', () => {
             ...barPanel.visualizationConfig.properties,
             barCategoryGapPercent: 95,
           },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts Pie chart display options and rejects invalid values', () => {
+    const piePanel = {
+      title: 'Calls by team',
+      panelType: 'PIE',
+      gridX: 0,
+      gridY: 0,
+      gridW: 6,
+      gridH: 3,
+      dashboardProcedureGuid: 'b6f7a16e-fbd5-4cfb-976c-63b41852fa2a',
+      procedureParams: { schemaVersion: 1, parameters: [] },
+      visualizationConfig: {
+        schemaVersion: 1,
+        properties: {
+          categoryField: 'team',
+          valueField: 'calls',
+          fields: ['calls', 'duration'],
+          showMode: 'all_values',
+          limit: 25,
+          pieType: 'donut',
+          sliceSorting: 'descending',
+          pieLabels: ['name', 'percent'],
+          tooltipMode: 'all',
+          tooltipMaxWidth: 320,
+          legend: true,
+        },
+      },
+    };
+
+    expect(createDashboardPanelSchema.safeParse(piePanel).success).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...piePanel,
+        visualizationConfig: {
+          ...piePanel.visualizationConfig,
+          properties: {
+            ...piePanel.visualizationConfig.properties,
+            tooltipMaxWidth: 10_000,
+          },
+        },
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts one or multiple numeric fields for Gauge and keeps legacy fields valid', () => {
+    const gaugePanel = {
+      title: 'Gauge',
+      panelType: 'GAUGE',
+      gridX: 0,
+      gridY: 0,
+      gridW: 6,
+      gridH: 3,
+      dashboardProcedureGuid: 'b6f7a16e-fbd5-4cfb-976c-63b41852fa2a',
+      procedureParams: { schemaVersion: 1, parameters: [] },
+      visualizationConfig: {
+        schemaVersion: 1,
+        properties: {
+          valueFields: ['total_calls', 'abandoned_calls'],
+          minimum: 0,
+          maximum: 100,
+        },
+      },
+    };
+
+    expect(createDashboardPanelSchema.safeParse(gaugePanel).success).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...gaugePanel,
+        visualizationConfig: {
+          schemaVersion: 1,
+          properties: { valueField: 'total_calls', minimum: 0, maximum: 100 },
+        },
+      }).success,
+    ).toBe(true);
+    expect(
+      createDashboardPanelSchema.safeParse({
+        ...gaugePanel,
+        visualizationConfig: {
+          schemaVersion: 1,
+          properties: { valueFields: ['total_calls', 'total_calls'] },
         },
       }).success,
     ).toBe(false);
@@ -442,15 +541,17 @@ describe('Dashboard DTOs', () => {
           gradient: true,
           barGlow: false,
           centerGlow: true,
-          gauges: [{
-            id: 'calls',
-            title: 'Calls',
-            source: 'FIELD',
-            field: 'total_calls',
-            format: 'number',
-            minimum: 0,
-            maximum: 5,
-          }],
+          gauges: [
+            {
+              id: 'calls',
+              title: 'Calls',
+              source: 'FIELD',
+              field: 'total_calls',
+              format: 'number',
+              minimum: 0,
+              maximum: 5,
+            },
+          ],
         },
       },
     };
@@ -463,11 +564,13 @@ describe('Dashboard DTOs', () => {
           ...gaugeGridPanel.visualizationConfig,
           properties: {
             ...gaugeGridPanel.visualizationConfig.properties,
-            gauges: [{
-              ...gaugeGridPanel.visualizationConfig.properties.gauges[0],
-              minimum: 5,
-              maximum: 2,
-            }],
+            gauges: [
+              {
+                ...gaugeGridPanel.visualizationConfig.properties.gauges[0],
+                minimum: 5,
+                maximum: 2,
+              },
+            ],
           },
         },
       }).success,
@@ -484,10 +587,12 @@ describe('Dashboard DTOs', () => {
             ...gaugeGridPanel.visualizationConfig,
             properties: {
               ...gaugeGridPanel.visualizationConfig.properties,
-              gauges: [{
-                ...gaugeGridPanel.visualizationConfig.properties.gauges[0],
-                ...range,
-              }],
+              gauges: [
+                {
+                  ...gaugeGridPanel.visualizationConfig.properties.gauges[0],
+                  ...range,
+                },
+              ],
             },
           },
         }).success,
@@ -508,13 +613,7 @@ describe('Dashboard DTOs', () => {
         },
       }).success,
     ).toBe(true);
-    for (const invalid of [
-      { barWidthFactor: 1.1 },
-      { segments: 0 },
-      { segmentSpacing: -0.1 },
-      { neutralValue: 100 },
-      { textMode: 'unknown' },
-    ]) {
+    for (const invalid of [{ barWidthFactor: 1.1 }, { segments: 0 }, { segmentSpacing: -0.1 }, { neutralValue: 100 }, { textMode: 'unknown' }]) {
       expect(
         createDashboardPanelSchema.safeParse({
           ...gaugeGridPanel,
@@ -635,31 +734,37 @@ describe('Dashboard DTOs', () => {
   });
 
   it('validates panel execution filters and procedure parameter contracts', () => {
-    expect(executeDashboardPanelSchema.parse({
-      panelName: 'Teams Calls',
-      filters: { dateFrom: '2026-10-01', serviceId: 'svc-1' },
-    })).toMatchObject({
+    expect(
+      executeDashboardPanelSchema.parse({
+        panelName: 'Teams Calls',
+        filters: { dateFrom: '2026-10-01', serviceId: 'svc-1' },
+      }),
+    ).toMatchObject({
       panelName: 'Teams Calls',
       filters: { dateFrom: '2026-10-01', serviceId: 'svc-1' },
     });
     expect(executeDashboardPanelSchema.safeParse({ filters: { 'bad filter': 'x' } }).success).toBe(false);
     expect(executeDashboardPanelSchema.safeParse({ filters: {}, procedureName: 'sp_dashboard_any' }).success).toBe(false);
-    expect(dashboardPanelExecutionApiResponseSchema.safeParse({
-      success: false,
-      message: 'Execution failed',
-      data: null,
-      errors: [{
-        code: 'DASHBOARD_PANEL_EXECUTION_FAILED',
+    expect(
+      dashboardPanelExecutionApiResponseSchema.safeParse({
+        success: false,
         message: 'Execution failed',
-        context: {
-          panelName: 'Teams Calls',
-          procedureName: 'sp_dash_Teams_Calls',
-          database: 'pozolito',
-          parameters: [{ name: 'p_from', value: '2026-11-24' }],
-        },
-      }],
-      meta: { requestId: 'req-test' },
-    }).success).toBe(true);
+        data: null,
+        errors: [
+          {
+            code: 'DASHBOARD_PANEL_EXECUTION_FAILED',
+            message: 'Execution failed',
+            context: {
+              panelName: 'Teams Calls',
+              procedureName: 'sp_dash_Teams_Calls',
+              database: 'pozolito',
+              parameters: [{ name: 'p_from', value: '2026-11-24' }],
+            },
+          },
+        ],
+        meta: { requestId: 'req-test' },
+      }).success,
+    ).toBe(true);
 
     const catalogEntry = {
       procedureName: 'sp_dash_calls_summary',

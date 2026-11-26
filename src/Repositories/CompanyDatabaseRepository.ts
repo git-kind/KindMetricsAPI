@@ -2,7 +2,7 @@ import type { ResultSetHeader, RowDataPacket } from 'mysql2';
 import { AppError } from '../Errors/AppError.js';
 import type { CompanyContext } from '../Models/Common.js';
 import { companyConnectionService } from '../Services/CompanyConnectionService.js';
-import { callStoredProcedure, executeReadOnlyProcedure, executeReadOnlyProcedureWithMetadata, getExecutorDatabaseName, logDatabaseConnection, type ProcedureResultColumn } from '../Database/SqlExecutor.js';
+import { callStoredProcedure, executeReadOnlyProcedure, executeReadOnlyProcedureWithMetadata, getExecutorDatabaseName, getExecutorUserName, logDatabaseConnection, type ProcedureResultColumn } from '../Database/SqlExecutor.js';
 
 export type ProcedureParameter = string | number | null | Buffer;
 
@@ -52,7 +52,11 @@ function translateCompanyDatabaseError(error: unknown): never {
   throw error;
 }
 
-function addDatabaseNameToError(error: unknown, databaseName: string | undefined): Error {
+function addDatabaseDetailsToError(
+  error: unknown,
+  databaseName: string | undefined,
+  databaseUser: string | undefined,
+): Error {
   const source = error && typeof error === 'object' ? error as {
     code?: unknown;
     errno?: unknown;
@@ -65,6 +69,7 @@ function addDatabaseNameToError(error: unknown, databaseName: string | undefined
     ...(typeof source.sqlState === 'string' ? { sqlState: source.sqlState } : {}),
     ...(typeof source.sqlMessage === 'string' ? { sqlMessage: source.sqlMessage } : {}),
     ...(databaseName ? { databaseName } : {}),
+    ...(databaseUser ? { databaseUser } : {}),
   });
 }
 
@@ -134,7 +139,13 @@ export class CompanyDatabaseRepository {
       return await executeReadOnlyProcedureWithMetadata(companyPool, procedure, params, timeoutSeconds);
     } catch (error) {
       return translateCompanyDatabaseError(
-        companyPool ? addDatabaseNameToError(error, getExecutorDatabaseName(companyPool)) : error,
+        companyPool
+          ? addDatabaseDetailsToError(
+              error,
+              getExecutorDatabaseName(companyPool),
+              getExecutorUserName(companyPool),
+            )
+          : error,
       );
     }
   }

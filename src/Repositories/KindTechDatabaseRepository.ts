@@ -4,11 +4,20 @@ import { pool } from '../Config/DatabaseConfig.js';
 import {
   callStoredProcedure,
   executeReadOnlyProcedureWithMetadata,
+  getExecutorDatabaseName,
+  getExecutorUserName,
   logDatabaseConnection,
   type ProcedureResultColumn,
 } from '../Database/SqlExecutor.js';
 
 export class KindTechDatabaseRepository {
+  getConnectionDetails() {
+    return {
+      database: getExecutorDatabaseName(pool) ?? process.env.MYSQL_DATABASE ?? 'kindmetrics',
+      databaseUser: getExecutorUserName(pool) ?? process.env.MYSQL_USER ?? null,
+    };
+  }
+
   async logConnection(_company: CompanyContext, message: string, requestId?: string): Promise<void> {
     logDatabaseConnection(pool, message, requestId ? { requestId } : {});
   }

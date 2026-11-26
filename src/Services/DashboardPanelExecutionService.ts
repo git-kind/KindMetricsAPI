@@ -42,6 +42,16 @@ function databaseNameFromError(error: unknown): string | undefined {
   return undefined;
 }
 
+function databaseUserFromError(error: unknown): string | undefined {
+  let current = error;
+  for (let depth = 0; depth < 4 && current && typeof current === 'object'; depth += 1) {
+    const candidate = current as { databaseUser?: unknown; cause?: unknown };
+    if (typeof candidate.databaseUser === 'string') return candidate.databaseUser;
+    current = candidate.cause;
+  }
+  return undefined;
+}
+
 function databaseErrorFromError(error: unknown): Record<string, string | number> | undefined {
   let current = error;
   const details: Record<string, string | number> = {};
@@ -63,6 +73,11 @@ function databaseErrorFromError(error: unknown): Record<string, string | number>
     current = candidate.cause;
   }
   return Object.keys(details).length ? details : undefined;
+}
+
+function redactDiagnosticValue(name: string, value: ProcedureParameter): ProcedureParameter | '[REDACTED]' {
+  const sensitiveName = /password|passwd|pwd|secret|token|api[_-]?key|authorization|credential|email|phone|mobile|address|rfc|tax|ssn|social.?security|user.?id|user.?guid/i;
+  return Buffer.isBuffer(value) || sensitiveName.test(name) ? '[REDACTED]' : value;
 }
 
 function valueMatchesType(value: unknown, type: (typeof parameterTypes)[number]): value is ProcedureParameter {
@@ -136,6 +151,7 @@ export class DashboardPanelExecutionService {
       return {
         panelGuid,
         panelType: config.panelType,
+        procedureName: null,
         columns: [],
         rows: [],
         rowCount: 0,
@@ -178,7 +194,7 @@ export class DashboardPanelExecutionService {
     }
 
     const parameters: ProcedureParameter[] = [];
-    const diagnosticParameters: DiagnosticParameter[] = [];
+    const diagnosticParameters: Array<DiagnosticParameter & { type: (typeof parameterTypes)[number] }> = [];
     for (const parameter of contract.data.parameters) {
       const mappingEntry = mappedByName.get(parameter.name)!;
       let value: unknown;
@@ -203,7 +219,16 @@ export class DashboardPanelExecutionService {
       }
       const parameterValue = (value ?? null) as ProcedureParameter;
       parameters.push(parameterValue);
-      diagnosticParameters.push({ name: parameter.name, value: parameterValue });
+      diagnosticParameters.push({
+        name: parameter.name,
+        type: parameter.type,
+        value: redactDiagnosticValue(
+          mappingEntry.source === 'SYSTEM' && mappingEntry.systemKey === 'userGuid'
+            ? 'userGuid'
+            : parameter.name,
+          parameterValue,
+        ),
+      });
     }
 
     const running = this.activeExecutions.get(company.id) ?? 0;
@@ -237,6 +262,7 @@ export class DashboardPanelExecutionService {
               panelGuid,
               procedureName: config.procedureName,
               database: databaseNameFromError(error) ?? null,
+              databaseUser: databaseUserFromError(error) ?? null,
               parameters: diagnosticParameters,
               ...(databaseError ? { databaseError } : {}),
             },
@@ -267,6 +293,7 @@ export class DashboardPanelExecutionService {
       return {
         panelGuid,
         panelType: config.panelType,
+        procedureName: config.procedureName,
         columns,
         rows,
         rowCount: rows.length,

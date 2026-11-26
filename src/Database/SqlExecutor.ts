@@ -30,6 +30,10 @@ export function getExecutorDatabaseName(executor: SqlExecutor): string | undefin
   return getExecutorConnectionConfig(executor).database;
 }
 
+export function getExecutorUserName(executor: SqlExecutor): string | undefined {
+  return getExecutorConnectionConfig(executor).user;
+}
+
 export function setStoredProcedureLogger(logger: StoredProcedureLogger): void {
   storedProcedureLogger = logger;
 }

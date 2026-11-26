@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   callStoredProcedure: vi.fn(),
   executeReadOnlyProcedureWithMetadata: vi.fn(),
   getExecutorDatabaseName: vi.fn(),
+  getExecutorUserName: vi.fn(),
 }));
 
 vi.mock('../src/Services/CompanyConnectionService.js', () => ({
@@ -15,6 +16,7 @@ vi.mock('../src/Database/SqlExecutor.js', () => ({
   callStoredProcedure: mocks.callStoredProcedure,
   executeReadOnlyProcedureWithMetadata: mocks.executeReadOnlyProcedureWithMetadata,
   getExecutorDatabaseName: mocks.getExecutorDatabaseName,
+  getExecutorUserName: mocks.getExecutorUserName,
 }));
 
 import { CompanyDatabaseRepository } from '../src/Repositories/CompanyDatabaseRepository.js';
@@ -31,6 +33,7 @@ describe('CompanyDatabaseRepository connection errors', () => {
     vi.clearAllMocks();
     mocks.getPool.mockResolvedValue({ database: 'pozolito' });
     mocks.getExecutorDatabaseName.mockReturnValue('pozolito');
+    mocks.getExecutorUserName.mockReturnValue('pozolito_api');
   });
 
   it('returns an actionable 503 when MySQL rejects the company credentials', async () => {
@@ -60,7 +63,7 @@ describe('CompanyDatabaseRepository connection errors', () => {
       statusCode: 404,
       code: 'COMPANY_DASHBOARD_PROCEDURE_NOT_FOUND',
       message: 'El procedimiento autorizado no existe en la base de datos de la empresa.',
-      cause: { databaseName: 'pozolito' },
+      cause: { databaseName: 'pozolito', databaseUser: 'pozolito_api' },
     });
   });
 

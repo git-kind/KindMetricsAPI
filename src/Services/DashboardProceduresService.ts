@@ -5,7 +5,7 @@ import { DashboardMetadataRepository } from '../Repositories/DashboardMetadataRe
 import { DashboardProcedureRepository } from '../Repositories/DashboardProcedures/DashboardProcedureRepository.js';
 import { actorId as resolveActorId } from '../Repositories/StoredProcedures/ActorRepository.js';
 
-function persistenceError(error: unknown): never {
+function persistenceError(error: unknown, context?: Record<string, unknown>): never {
   const message = error && typeof error === 'object' && 'sqlMessage' in error && typeof error.sqlMessage === 'string' ? error.sqlMessage : '';
   const errorCode = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
   const errorNumber = error && typeof error === 'object' && 'errno' in error ? error.errno : undefined;
@@ -15,8 +15,13 @@ function persistenceError(error: unknown): never {
     message.includes("Field 'id' doesn't have a default value")
   ) {
     throw new AppError(
-      'El catálogo de procedimientos requiere la migración 0012-dashboard-procedure-id-auto-increment.sql en la base central KindMetricsData.',
-      { statusCode: 503, code: 'DASHBOARD_PROCEDURE_CATALOG_MIGRATION_REQUIRED' },
+      'El catálogo de procedimientos requiere la migración 0012-dashboard-procedure-id-auto-increment.sql en la base central.',
+      {
+        statusCode: 503,
+        code: 'DASHBOARD_PROCEDURE_CATALOG_MIGRATION_REQUIRED',
+        cause: error,
+        ...(context ? { context } : {}),
+      },
     );
   }
   if (message.includes('DASHBOARD_PROCEDURE_NOT_FOUND'))
@@ -53,19 +58,35 @@ export class DashboardProceduresService {
       );
       for (const procedure of discovered) {
         if (availableProcedureNames.has(procedure.procedureName)) {
-          await this.repository.syncDiscoveredProcedure(
-            company,
-            procedure.procedureName,
-            {
-              schemaVersion: 1,
-              parameters: procedure.parameters.map((parameter) => ({
-                name: parameter.name,
-                type: parameter.type,
-                required: true,
+          const parametersSchema = {
+            schemaVersion: 1 as const,
+            parameters: procedure.parameters.map((parameter) => ({
+              name: parameter.name,
+              type: parameter.type,
+              required: true,
+            })),
+          };
+          try {
+            await this.repository.syncDiscoveredProcedure(
+              company,
+              procedure.procedureName,
+              parametersSchema,
+              actor,
+            );
+          } catch (error) {
+            const connection = this.repository.getCatalogConnectionDetails();
+            return persistenceError(error, {
+              database: connection.database,
+              databaseUser: connection.databaseUser,
+              procedureName: procedure.procedureName,
+              parameters: procedure.parameters.map(({ name, type, mode }) => ({
+                name,
+                type,
+                mode,
               })),
-            },
-            actor,
-          );
+              companyCode: company.code,
+            });
+          }
         }
       }
       const catalogProcedures = await this.repository.list(company, true);

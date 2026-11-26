@@ -50,6 +50,7 @@ describe('Dashboard Panel execution', () => {
     const result = await service.execute(company, dashboardGuid, tabGuid, panelGuid, {}, userGuid);
 
     expect(repository.execute).toHaveBeenCalledWith(company, 'sp_dash_AVG_Calls_Duration', [], 20);
+    expect(result.procedureName).toBe('sp_dash_AVG_Calls_Duration');
     expect(result.rows).toEqual([{ total_calls: 42 }]);
     expect(result.columns).toEqual([{ name: 'total_calls', type: 'INTEGER' }]);
   });
@@ -158,6 +159,7 @@ describe('Dashboard Panel execution', () => {
     const databaseError = Object.assign(new Error('Missing table'), {
       code: 'ER_NO_SUCH_TABLE',
       databaseName: 'pozolito',
+      databaseUser: 'pozolito_api',
     });
     const { service, repository } = createService();
     vi.mocked(repository.execute).mockRejectedValue(databaseError);
@@ -171,7 +173,57 @@ describe('Dashboard Panel execution', () => {
         panelGuid,
         procedureName: 'sp_dash_AVG_Calls_Duration',
         database: 'pozolito',
+        databaseUser: 'pozolito_api',
         parameters: [],
+      },
+    });
+  });
+
+  it('redacts sensitive values from failed execution diagnostics', async () => {
+    const { service, repository } = createService({
+      parametersSchema: {
+        schemaVersion: 1,
+        parameters: [
+          { name: 'p_email', type: 'STRING', required: true },
+          { name: 'p_status', type: 'STRING', required: true },
+          { name: 'p_userGuid', type: 'STRING', required: true },
+        ],
+      },
+      procedureParams: {
+        schemaVersion: 1,
+        parameters: [
+          { name: 'p_email', type: 'STRING', source: 'DASHBOARD_FILTER', filter: 'email', required: true },
+          { name: 'p_status', type: 'STRING', source: 'DASHBOARD_FILTER', filter: 'status', required: true },
+          { name: 'p_userGuid', type: 'STRING', source: 'SYSTEM', systemKey: 'userGuid', required: true },
+        ],
+      },
+    });
+    vi.mocked(repository.execute).mockRejectedValue(
+      Object.assign(new Error('Stored procedure failed'), {
+        databaseName: 'pozolito',
+        databaseUser: 'pozolito_api',
+      }),
+    );
+
+    await expect(
+      service.execute(
+        company,
+        dashboardGuid,
+        tabGuid,
+        panelGuid,
+        { email: 'person@example.com', status: 'active' },
+        userGuid,
+      ),
+    ).rejects.toMatchObject({
+      context: {
+        database: 'pozolito',
+        databaseUser: 'pozolito_api',
+        procedureName: 'sp_dash_AVG_Calls_Duration',
+        parameters: [
+          { name: 'p_email', type: 'STRING', value: '[REDACTED]' },
+          { name: 'p_status', type: 'STRING', value: 'active' },
+          { name: 'p_userGuid', type: 'STRING', value: '[REDACTED]' },
+        ],
       },
     });
   });
